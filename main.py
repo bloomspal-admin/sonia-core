@@ -613,8 +613,8 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
             tn = pkg.get("tracking_number", "")
             if tn:
                 all_tracking.append(tn)
-                # Skip if already delivered
-                if tn not in delivered_tracking and pkg.get("status", "").lower() != "delivered":
+                # Skip only if Railway DB already has FedEx data for this tracking
+                if tn not in delivered_tracking:
                     active_tracking.append(tn)
 
     logger.info(f"Tenant #{tenant_id}: {len(all_tracking)} total packages, {len(active_tracking)} active, {len(delivered_tracking)} already delivered")
