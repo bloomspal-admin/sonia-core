@@ -63,7 +63,7 @@ def get_sonia_status(status_code: str, description: str = "") -> str:
         return "delayed"
 
     # On hold
-    if "hold" in desc_lower:
+    if any(term in desc_lower for term in ["hold", "delivery option requested", "ready for pickup"]):
         return "on_hold"
 
     # Delivery attempted
