@@ -292,7 +292,7 @@ class DBManager:
             ON CONFLICT (tracking_number) DO UPDATE SET
                 client_id = EXCLUDED.client_id,
                 client_name_raw = EXCLUDED.client_name_raw,
-                sonia_status = EXCLUDED.sonia_status,
+                sonia_status = CASE WHEN EXCLUDED.sonia_status = 'unknown'::shipment_status THEN shipments.sonia_status ELSE EXCLUDED.sonia_status END,
                 fedex_status = EXCLUDED.fedex_status,
                 fedex_status_code = EXCLUDED.fedex_status_code,
                 label_creation_date = EXCLUDED.label_creation_date,
@@ -1071,7 +1071,7 @@ class DBManager:
             self.cursor.execute(
                 "UPDATE daily_run_logs SET"
                 " total_shipments_read=%s, new_shipments=%s,"
-                " status_updates=%s, anomalies_detected=%s,"
+                " shipments_updated=%s, anomalies_detected=%s,"
                 " claims_created=%s, reports_sent=%s,"
                 " errors=%s, status=%s::run_status,"
                 " finished_at=NOW() WHERE id=%s",
