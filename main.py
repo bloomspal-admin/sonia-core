@@ -34,8 +34,9 @@ from modules.report_generator import ReportGenerator
 from modules.whatsapp_sender import WhatsAppSender
 from modules.odoo_client import OdooClient
 from modules.excel_generator import ExcelReportGenerator
+from modules.email_sender import EmailSender
 
-# ââ Logging ââ
+# Ã¢ÂÂÃ¢ÂÂ Logging Ã¢ÂÂÃ¢ÂÂ
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("sonia-core")
 
@@ -157,6 +158,20 @@ def init_modules():
             api_key=config.SONIA_AGENT_API_KEY,
         )
         logger.info("WhatsAppSender initialized")
+
+    # Email Sender (optional - only if SMTP configured)
+    if config.SMTP_USER and config.SMTP_PASSWORD:
+        mods["email"] = EmailSender(
+            smtp_host=config.SMTP_HOST,
+            smtp_port=config.SMTP_PORT,
+            smtp_user=config.SMTP_USER,
+            smtp_password=config.SMTP_PASSWORD,
+            from_email=config.SMTP_FROM_EMAIL or config.SMTP_USER,
+            from_name=config.SMTP_FROM_NAME,
+        )
+        logger.info("EmailSender initialized")
+    else:
+        logger.info("EmailSender not configured (SMTP_USER/SMTP_PASSWORD missing)")
 
     # Odoo Client
     if config.ODOO_URL and config.ODOO_USER:
@@ -323,7 +338,7 @@ async def run_daily_flow(modules: dict):
     total_active_packages = 0  # Total non-delivered packages across all tenants
 
     try:
-        # ââ Step 1: Read from DynamoDB ââ
+        # Ã¢ÂÂÃ¢ÂÂ Step 1: Read from DynamoDB Ã¢ÂÂÃ¢ÂÂ
         flow_progress["phase"] = "reading_dynamodb"
         logger.info("Step 1: Reading shipments from DynamoDB...")
         raw_shipments = []
@@ -361,7 +376,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ââ Step 2: Group by tenant ââ
+        # Ã¢ÂÂÃ¢ÂÂ Step 2: Group by tenant Ã¢ÂÂÃ¢ÂÂ
         flow_progress["phase"] = "grouping_by_tenant"
         logger.info("Step 2: Grouping shipments by tenant...")
         tenant_groups = defaultdict(list)
@@ -385,7 +400,7 @@ async def run_daily_flow(modules: dict):
 
         flow_progress["packages_total"] = total_active_packages
 
-        #  Step 3: Load tenant data from Odoo spreadsheet 
+        # ÂÂ Step 3: Load tenant data from Odoo spreadsheet ÂÂ
         flow_progress["phase"] = "loading_odoo_spreadsheet"
         logger.info("Step 3: Loading tenant data from Odoo WhatsApp BBDD spreadsheet...")
         odoo = modules.get("odoo")
@@ -412,9 +427,14 @@ async def run_daily_flow(modules: dict):
                     c["whatsapp"] for c in odoo_contacts
                     if c.get("tenant_number") == tid and c.get("whatsapp")
                 ]
+                email_addrs = [
+                    c["email"] for c in odoo_contacts
+                    if c.get("tenant_number") == tid and c.get("email")
+                ]
                 tenant_mapping[tid] = {
                     "tenant_name": tname,
                     "whatsapp_numbers": whatsapp_nums,
+                    "email_addresses": email_addrs,
                 }
 
             logger.info(
@@ -434,7 +454,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ââ Step 4: Process each tenant ââ
+        # Ã¢ÂÂÃ¢ÂÂ Step 4: Process each tenant Ã¢ÂÂÃ¢ÂÂ
         flow_progress["phase"] = "processing_tenants"
         logger.info("Step 4: Processing tenants...")
         tenant_list = list(tenant_groups.items())
@@ -460,12 +480,14 @@ async def run_daily_flow(modules: dict):
 
                 tenant_name = tenant_info.get("tenant_name", f"Tenant #{tenant_id}")
                 whatsapp_numbers = tenant_info.get("whatsapp_numbers", [])
+                email_addresses = tenant_info.get("email_addresses", [])
                 stats["tenants_in_mapping"] += 1
 
                 await _process_tenant(
                     tenant_id=tenant_id,
                     tenant_name=tenant_name,
                     whatsapp_numbers=whatsapp_numbers,
+                    email_addresses=email_addresses,
                     reserves=reserves,
                     modules=modules,
                     stats=stats,
@@ -494,7 +516,7 @@ async def run_daily_flow(modules: dict):
                 )
                 stats["alerts_sent"] += 1
 
-        # ── Generate consolidated Excel report ──
+        # ââ Generate consolidated Excel report ââ
         excel_gen = modules.get("excel_gen")
         if excel_gen and db:
             try:
@@ -528,7 +550,7 @@ async def run_daily_flow(modules: dict):
                 logger.error(f"Error generating consolidated Excel: {e}")
 
 
-        # ââ Finalize ââ
+        # Ã¢ÂÂÃ¢ÂÂ Finalize Ã¢ÂÂÃ¢ÂÂ
         flow_progress["phase"] = "finalizing"
         status = "success" if not errors else "partial"
         db.update_run_log(run_id, stats, errors, status)
@@ -567,6 +589,7 @@ async def run_daily_flow(modules: dict):
 
 
 async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: List[str],
+                           email_addresses: List[str],
                            reserves: List[Dict], modules: dict, stats: dict, errors: list,
                            total_active_packages: int):
     """
@@ -588,7 +611,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
     logger.info(f"--- Processing Tenant #{tenant_id}: {tenant_name} ({len(reserves)} reserves) ---")
     flow_progress["tenant_current"] = f"{tenant_name} (#{tenant_id})"
 
-    # ââ Get delivered tracking numbers from shipments table ââ
+    # Ã¢ÂÂÃ¢ÂÂ Get delivered tracking numbers from shipments table Ã¢ÂÂÃ¢ÂÂ
     delivered_tracking = set()
     try:
         undelivered = db.get_undelivered_shipments()
@@ -619,7 +642,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
 
     logger.info(f"Tenant #{tenant_id}: {len(all_tracking)} total packages, {len(active_tracking)} active, {len(delivered_tracking)} already delivered")
 
-    # ââ Store shipments in PostgreSQL ââ
+    # Ã¢ÂÂÃ¢ÂÂ Store shipments in PostgreSQL Ã¢ÂÂÃ¢ÂÂ
     # Get or create client in DB
     client_info = db.get_client_by_tenant(tenant_id)
     client_db_id = client_info.get("client_id") if client_info else None
@@ -648,7 +671,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
         stats["tenants_no_whatsapp"] += 1
         stats["alerts_sent"] += 1
 
-    # ââ Query FedEx for active tracking numbers ââ
+    # Ã¢ÂÂÃ¢ÂÂ Query FedEx for active tracking numbers Ã¢ÂÂÃ¢ÂÂ
     if fedex and active_tracking:
         logger.info(f"Querying FedEx for {len(active_tracking)} active packages...")
         batch_size = 30
@@ -685,7 +708,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["alerts_sent"] += 1
 
-    # ââ Detect anomalies ââ
+    # Ã¢ÂÂÃ¢ÂÂ Detect anomalies Ã¢ÂÂÃ¢ÂÂ
     if anomaly_detector and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -711,7 +734,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 "error": str(e),
             })
 
-    # ââ Generate report ââ
+    # Ã¢ÂÂÃ¢ÂÂ Generate report Ã¢ÂÂÃ¢ÂÂ
     if report_gen and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -722,7 +745,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["reports_generated"] += 1
 
-                # ââ Send report via WhatsApp ââ
+                # Ã¢ÂÂÃ¢ÂÂ Send report via WhatsApp Ã¢ÂÂÃ¢ÂÂ
                 if whatsapp and whatsapp_numbers:
                     for phone_number in whatsapp_numbers:
                         try:
@@ -753,6 +776,28 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                                 "Solo este cliente"
                             )
                             stats["alerts_sent"] += 1
+
+                # ── Send report via Email ──
+                email_sender = modules.get("email")
+                if email_sender and email_addresses:
+                    for email_addr in email_addresses:
+                        try:
+                            sent = email_sender.send_report_email(
+                                to_email=email_addr,
+                                client_name=tenant_name,
+                                report_text=report,
+                            )
+                            if sent:
+                                stats["email_reports_sent"] = stats.get("email_reports_sent", 0) + 1
+                                logger.info(f"Email report sent to {email_addr} for {tenant_name}")
+                        except Exception as e:
+                            logger.error(f"Email send error to {email_addr}: {e}")
+                            errors.append({
+                                "step": f"email_send_tenant_{tenant_id}",
+                                "email": email_addr,
+                                "error": str(e),
+                            })
+
         except Exception as e:
             logger.error(f"Report generation error for tenant #{tenant_id}: {e}")
             errors.append({
@@ -761,7 +806,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
             })
 
 
-    # ── Generate Excel report per tenant ──
+    # ââ Generate Excel report per tenant ââ
     excel_gen = modules.get("excel_gen")
     if excel_gen and client_db_id:
         try:
@@ -789,6 +834,23 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                                     stats["excel_reports_sent"] = stats.get("excel_reports_sent", 0) + 1
                             except Exception as e:
                                 logger.error(f"Error sending Excel to {phone_number}: {e}")
+
+                    # Send Excel via Email to tenant contacts
+                    email_sender = modules.get("email")
+                    if email_sender and email_addresses:
+                        for email_addr in email_addresses:
+                            try:
+                                sent = email_sender.send_report_email(
+                                    to_email=email_addr,
+                                    client_name=tenant_name,
+                                    report_text=f"Adjunto encontraras el reporte Excel de tracking para {tenant_name}.",
+                                    excel_path=excel_path,
+                                )
+                                if sent:
+                                    stats["excel_emails_sent"] = stats.get("excel_emails_sent", 0) + 1
+                            except Exception as e:
+                                logger.error(f"Error sending Excel email to {email_addr}: {e}")
+
         except Exception as e:
             logger.error(f"Excel generation error for tenant #{tenant_id}: {e}")
 
