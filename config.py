@@ -1,5 +1,5 @@
 """
-SonIA Core — Configuration
+SonIA Core â Configuration
 All settings loaded from environment variables for easy migration to AWS.
 """
 
@@ -12,13 +12,13 @@ from datetime import timezone, timedelta
 COT = timezone(timedelta(hours=-5))  # Colombia Time
 
 # ============================================================================
-# DATABASE — PostgreSQL (Railway)
+# DATABASE â PostgreSQL (Railway)
 # ============================================================================
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 # Railway provides DATABASE_URL. For local dev, set manually.
 
 # ============================================================================
-# AWS — DynamoDB (READ ONLY)
+# AWS â DynamoDB (READ ONLY)
 # ============================================================================
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
@@ -71,6 +71,21 @@ CRON_MINUTE = int(os.getenv("CRON_MINUTE", "0"))
 # ============================================================================
 FEDEX_BATCH_SIZE = int(os.getenv("FEDEX_BATCH_SIZE", "30"))  # Max 30 per FedEx recommendation
 FEDEX_BATCH_DELAY = float(os.getenv("FEDEX_BATCH_DELAY", "0.5"))  # Seconds between batches
+
+# ============================================================================
+# Email (SMTP)
+# ============================================================================
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # App password for Gmail
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "SonIA - BloomsPal")
+
+# ============================================================================
+# Odoo Spreadsheet
+# ============================================================================
+ODOO_SPREADSHEET_ID = int(os.getenv("ODOO_SPREADSHEET_ID", "0"))
 
 # ============================================================================
 # Server
