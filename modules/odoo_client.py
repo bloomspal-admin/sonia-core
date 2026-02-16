@@ -300,6 +300,7 @@ class OdooClient:
             clave = self._cell_value(cells, f"F{row}")
             bloqueo = self._cell_value(cells, f"G{row}")
             tenant_num = self._cell_value(cells, f"H{row}")
+            email = self._cell_value(cells, f"I{row}")
 
             if not cliente and not nombre and not whatsapp:
                 break
@@ -309,6 +310,7 @@ class OdooClient:
                 "nombre_usuario": nombre,
                 "nickname": nickname,
                 "whatsapp": self._clean_phone(whatsapp),
+                "email": email.strip() if email else "",
                 "rol": rol,
                 "clave": clave,
                 "bloqueo": bloqueo,
