@@ -1074,7 +1074,7 @@ class DBManager:
                 " shipments_updated=%s, anomalies_detected=%s,"
                 " claims_created=%s, reports_sent=%s,"
                 " errors=%s, status=%s::run_status,"
-                " finished_at=NOW() WHERE id=%s",
+                " completed_at=NOW() WHERE id=%s",
                 (
                     stats.get("total_shipments", 0),
                     stats.get("new_shipments", 0),
