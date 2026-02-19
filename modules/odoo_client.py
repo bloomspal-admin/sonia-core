@@ -233,6 +233,8 @@ class OdooClient:
 
         if best_result:
             logger.info(f"Using {best_source} with {best_cells} total cells for spreadsheet {doc_id}")
+            # Apply any pending revisions on top of the snapshot
+            best_result = self._apply_revisions(doc_id, best_result)
             return best_result
 
         logger.error(f"All approaches failed for spreadsheet {doc_id}")
@@ -294,6 +296,82 @@ class OdooClient:
 
         logger.info(f"Parsed {len(mapping)} tenant mappings from Hoja 2")
         return mapping
+
+    @staticmethod
+    def _col_to_letter(col: int) -> str:
+        """Convert 0-indexed column number to letter (0=A, 1=B, ..., 25=Z)."""
+        return chr(65 + col)
+
+    def _apply_revisions(self, doc_id: int, data: Dict) -> Dict:
+        """Fetch spreadsheet revisions and apply UPDATE_CELL commands on top of snapshot."""
+        try:
+            revisions = self._execute(
+                "spreadsheet.revision", "search_read",
+                [[["res_id", "=", doc_id], ["res_model", "=", "documents.document"]]],
+                {"fields": ["commands"], "order": "id asc"}
+            )
+            if not revisions:
+                logger.info(f"No revisions found for spreadsheet {doc_id}")
+                return data
+
+            logger.info(f"Found {len(revisions)} revisions to apply for spreadsheet {doc_id}")
+
+            # Build sheet_id -> sheet index mapping
+            sheet_map = {}
+            for idx, sheet in enumerate(data.get("sheets", [])):
+                sid = sheet.get("id", "")
+                sheet_map[sid] = idx
+
+            applied = 0
+            for rev in revisions:
+                try:
+                    cmds_raw = rev.get("commands", "")
+                    if not cmds_raw:
+                        continue
+                    cmds_data = json.loads(cmds_raw)
+                    commands = cmds_data.get("commands", [])
+                    for cmd in commands:
+                        cmd_type = cmd.get("type", "")
+                        if cmd_type == "UPDATE_CELL":
+                            sheet_id = cmd.get("sheetId", "")
+                            col = cmd.get("col", 0)
+                            row = cmd.get("row", 0)
+                            content_val = cmd.get("content", "")
+                            s_idx = sheet_map.get(sheet_id)
+                            if s_idx is None:
+                                continue
+                            cell_ref = self._col_to_letter(col) + str(row + 1)
+                            sheet = data["sheets"][s_idx]
+                            if "cells" not in sheet:
+                                sheet["cells"] = {}
+                            if content_val:
+                                sheet["cells"][cell_ref] = {"content": content_val}
+                            else:
+                                sheet["cells"].pop(cell_ref, None)
+                            applied += 1
+                        elif cmd_type == "DELETE_CONTENT":
+                            sheet_id = cmd.get("sheetId", "")
+                            s_idx = sheet_map.get(sheet_id)
+                            if s_idx is None:
+                                continue
+                            target = cmd.get("target", [])
+                            for zone in target:
+                                for r in range(zone.get("top", 0), zone.get("bottom", 0) + 1):
+                                    for c in range(zone.get("left", 0), zone.get("right", 0) + 1):
+                                        cell_ref = self._col_to_letter(c) + str(r + 1)
+                                        data["sheets"][s_idx].get("cells", {}).pop(cell_ref, None)
+                                        applied += 1
+                except Exception as e:
+                    logger.debug(f"Error applying revision: {e}")
+                    continue
+
+            total_cells = sum(len(s.get("cells", {})) for s in data.get("sheets", []))
+            logger.info(f"Applied {applied} cell updates from revisions. Total cells now: {total_cells}")
+            return data
+
+        except Exception as e:
+            logger.warning(f"Could not fetch/apply revisions for spreadsheet {doc_id}: {e}")
+            return data
 
     def _parse_contacts(self, cells: Dict) -> List[Dict]:
         """Parse Hoja 1 cells into contact list."""
