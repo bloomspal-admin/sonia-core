@@ -1,5 +1,5 @@
 """
-SonIA Core — PostgreSQL Database Manager
+SonIA Core â PostgreSQL Database Manager
 Handles all database operations for shipments, clients, claims, and run logs.
 Uses psycopg2 for synchronous operations (batch job context).
 Schema aligned with migrations/001_initial_schema.sql.
@@ -1028,10 +1028,14 @@ class DBManager:
             self.cursor.execute(excluded_shipments_query)
             logger.debug("Ensured excluded_shipments table exists")
 
+            # Commit table creations first so tables exist even if insert fails
+            self.conn.commit()
+
             # Insert initial excluded tracking numbers (claims/reclamaciones)
-            excluded_insert_query = """
-            INSERT INTO excluded_shipments (tracking_number, reason)
-            VALUES
+            try:
+                excluded_insert_query = """
+                INSERT INTO excluded_shipments (tracking_number, reason)
+                VALUES
                     ('888437042921', 'claim'), ('887732034978', 'claim'), ('886149579064', 'claim'), ('887332128779', 'claim'), ('888018548710', 'claim'),
                     ('888018548294', 'claim'), ('482244375701', 'claim'), ('887861722457', 'claim'), ('887620549897', 'claim'), ('887332161414', 'claim'),
                     ('887620636937', 'claim'), ('887862066410', 'claim'), ('887862012177', 'claim'), ('887180325668', 'claim'), ('887008277582', 'claim'),
@@ -1058,10 +1062,13 @@ class DBManager:
                     ('888721703495', 'claim'), ('482244352159', 'claim'), ('482244345319', 'claim'), ('457620984407', 'claim')
             ON CONFLICT (tracking_number) DO NOTHING
             """
-            self.cursor.execute(excluded_insert_query)
-            logger.debug(f"Inserted/verified 119 excluded shipments")
+                self.cursor.execute(excluded_insert_query)
+                self.conn.commit()
+                logger.debug("Inserted/verified 119 excluded shipments")
+            except psycopg2.Error as insert_err:
+                self.conn.rollback()
+                logger.warning(f"Could not insert excluded shipments (may already exist): {insert_err}")
 
-            self.conn.commit()
             logger.info("All required tables verified/created successfully")
             return True
 
