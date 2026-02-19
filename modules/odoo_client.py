@@ -164,70 +164,76 @@ class OdooClient:
         return results
 
     def read_spreadsheet(self, doc_id: int) -> Optional[Dict]:
-        """Read Odoo Documents spreadsheet, return parsed JSON with cell data."""
+        """Read Odoo Documents spreadsheet, trying all approaches and using the one with most data."""
+        best_result = None
+        best_cells = 0
+        best_source = ""
 
-        # Try 1: spreadsheet_snapshot (most likely to have full data)
+        def _count_cells(parsed):
+            return sum(len(s.get("cells", {})) for s in parsed.get("sheets", []))
+
+        def _decode_data(raw_b64):
+            raw = base64.b64decode(raw_b64)
+            try:
+                text = zlib.decompress(raw, 15 + 32).decode("utf-8")
+            except Exception:
+                text = raw.decode("utf-8", errors="replace")
+            return json.loads(text)
+
+        # Approach 1: spreadsheet_snapshot
         try:
             records = self._execute(
-                "documents.document", "read",
-                [[doc_id]],
+                "documents.document", "read", [[doc_id]],
                 {"fields": ["spreadsheet_snapshot"]}
             )
             if records:
                 snapshot = records[0].get("spreadsheet_snapshot")
                 if snapshot:
-                    raw = base64.b64decode(snapshot)
-                    try:
-                        text = zlib.decompress(raw, 15 + 32).decode("utf-8")
-                    except Exception:
-                        text = raw.decode("utf-8", errors="replace")
-                    parsed = json.loads(text)
-                    sheets = parsed.get("sheets", [])
-                    if sheets and any(len(s.get("cells", {})) > 0 for s in sheets):
-                        logger.info(f"Read spreadsheet {doc_id} via snapshot: {len(sheets)} sheets")
-                        return parsed
-                    logger.info("Snapshot exists but has no cell data, trying next approach")
+                    parsed = _decode_data(snapshot)
+                    cells = _count_cells(parsed)
+                    logger.info(f"Snapshot: {cells} cells across {len(parsed.get('sheets', []))} sheets")
+                    if cells > best_cells:
+                        best_result, best_cells, best_source = parsed, cells, "snapshot"
         except Exception as e:
             logger.warning(f"Snapshot approach failed: {e}")
 
-        # Try 2: spreadsheet_binary_data
+        # Approach 2: spreadsheet_binary_data
         try:
             records = self._execute(
-                "documents.document", "read",
-                [[doc_id]],
+                "documents.document", "read", [[doc_id]],
                 {"fields": ["spreadsheet_binary_data"]}
             )
             if records:
                 bin_data = records[0].get("spreadsheet_binary_data")
                 if bin_data:
-                    raw = base64.b64decode(bin_data)
-                    try:
-                        text = zlib.decompress(raw, 15 + 32).decode("utf-8")
-                    except Exception:
-                        text = raw.decode("utf-8", errors="replace")
-                    parsed = json.loads(text)
-                    sheets = parsed.get("sheets", [])
-                    if sheets and any(len(s.get("cells", {})) > 0 for s in sheets):
-                        logger.info(f"Read spreadsheet {doc_id} via binary_data: {len(sheets)} sheets")
-                        return parsed
+                    parsed = _decode_data(bin_data)
+                    cells = _count_cells(parsed)
+                    logger.info(f"Binary data: {cells} cells across {len(parsed.get('sheets', []))} sheets")
+                    if cells > best_cells:
+                        best_result, best_cells, best_source = parsed, cells, "binary_data"
         except Exception as e:
             logger.warning(f"Binary data approach failed: {e}")
 
-        # Try 3: spreadsheet_data (base template - may lack cell data)
+        # Approach 3: spreadsheet_data
         try:
             records = self._execute(
-                "documents.document", "read",
-                [[doc_id]],
+                "documents.document", "read", [[doc_id]],
                 {"fields": ["spreadsheet_data"]}
             )
             if records:
                 sd = records[0].get("spreadsheet_data")
                 if sd:
                     parsed = json.loads(sd)
-                    logger.info(f"Read spreadsheet {doc_id} via spreadsheet_data")
-                    return parsed
+                    cells = _count_cells(parsed)
+                    logger.info(f"Spreadsheet data: {cells} cells across {len(parsed.get('sheets', []))} sheets")
+                    if cells > best_cells:
+                        best_result, best_cells, best_source = parsed, cells, "spreadsheet_data"
         except Exception as e:
             logger.warning(f"spreadsheet_data approach failed: {e}")
+
+        if best_result:
+            logger.info(f"Using {best_source} with {best_cells} total cells for spreadsheet {doc_id}")
+            return best_result
 
         logger.error(f"All approaches failed for spreadsheet {doc_id}")
         return None
@@ -273,8 +279,10 @@ class OdooClient:
             tenant_val = self._cell_value(cells, f"A{row}")
             client_val = self._cell_value(cells, f"B{row}")
 
+            # Skip empty rows but keep scanning
             if not tenant_val and not client_val:
-                break
+                row += 1
+                continue
 
             try:
                 tenant_num = int(tenant_val)
@@ -302,8 +310,10 @@ class OdooClient:
             tenant_num = self._cell_value(cells, f"H{row}")
             email = self._cell_value(cells, f"I{row}")
 
+            # Skip empty rows but keep scanning to the end
             if not cliente and not nombre and not whatsapp:
-                break
+                row += 1
+                continue
 
             contact = {
                 "cliente": cliente,
