@@ -364,6 +364,7 @@ class DBManager:
             query = """
             SELECT * FROM shipments
             WHERE is_delivered = FALSE
+                AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
             ORDER BY updated_at DESC
             """
 
@@ -393,6 +394,7 @@ class DBManager:
             query = """
             SELECT * FROM shipments
             WHERE client_id = %s
+                AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
             ORDER BY updated_at DESC
             """
 
@@ -423,6 +425,7 @@ class DBManager:
             query = """
             SELECT * FROM shipments
             WHERE client_id = %s
+                AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
             ORDER BY created_at DESC
             """
 
