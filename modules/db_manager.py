@@ -1029,6 +1029,20 @@ class DBManager:
             self.cursor.execute(excluded_shipments_query)
             logger.debug("Ensured excluded_shipments table exists")
 
+            # --- unknown_tracking_strikes table ---
+            strikes_query = """
+            CREATE TABLE IF NOT EXISTS unknown_tracking_strikes (
+                id SERIAL PRIMARY KEY,
+                tracking_number VARCHAR(50) NOT NULL UNIQUE,
+                strike_count INTEGER DEFAULT 1,
+                first_seen_at TIMESTAMP DEFAULT NOW(),
+                last_seen_at TIMESTAMP DEFAULT NOW()
+            )
+            """
+
+            self.cursor.execute(strikes_query)
+            logger.debug("Ensured unknown_tracking_strikes table exists")
+
             # Commit table creations first so tables exist even if insert fails
             self.conn.commit()
 
