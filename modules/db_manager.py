@@ -1015,6 +1015,52 @@ class DBManager:
             self.cursor.execute(shipments_query)
             logger.debug("Ensured shipments table exists")
 
+            # --- excluded_shipments table ---
+            excluded_shipments_query = """
+            CREATE TABLE IF NOT EXISTS excluded_shipments (
+                id SERIAL PRIMARY KEY,
+                tracking_number VARCHAR(50) NOT NULL UNIQUE,
+                reason VARCHAR(255) DEFAULT 'claim',
+                excluded_at TIMESTAMP DEFAULT NOW(),
+                notes TEXT
+            )
+            """
+            self.cursor.execute(excluded_shipments_query)
+            logger.debug("Ensured excluded_shipments table exists")
+
+            # Insert initial excluded tracking numbers (claims/reclamaciones)
+            excluded_insert_query = """
+            INSERT INTO excluded_shipments (tracking_number, reason)
+            VALUES
+                    ('888437042921', 'claim'), ('887732034978', 'claim'), ('886149579064', 'claim'), ('887332128779', 'claim'), ('888018548710', 'claim'),
+                    ('888018548294', 'claim'), ('482244375701', 'claim'), ('887861722457', 'claim'), ('887620549897', 'claim'), ('887332161414', 'claim'),
+                    ('887620636937', 'claim'), ('887862066410', 'claim'), ('887862012177', 'claim'), ('887180325668', 'claim'), ('887008277582', 'claim'),
+                    ('482244377288', 'claim'), ('887230841471', 'claim'), ('888051872355', 'claim'), ('482244377141', 'claim'), ('886149484266', 'claim'),
+                    ('888398469674', 'claim'), ('888398467763', 'claim'), ('482244358054', 'claim'), ('888237007773', 'claim'), ('887765640743', 'claim'),
+                    ('887861771087', 'claim'), ('887732007025', 'claim'), ('887180307599', 'claim'), ('440231757935', 'claim'), ('887370345962', 'claim'),
+                    ('886881722235', 'claim'), ('886925106073', 'claim'), ('482244375080', 'claim'), ('888236919650', 'claim'), ('888237532057', 'claim'),
+                    ('887862130981', 'claim'), ('887332855245', 'claim'), ('440231760460', 'claim'), ('482244377737', 'claim'), ('457620981647', 'claim'),
+                    ('888018634603', 'claim'), ('887114235779', 'claim'), ('482244376190', 'claim'), ('482244350660', 'claim'), ('440231773909', 'claim'),
+                    ('457620952136', 'claim'), ('440231771858', 'claim'), ('887112925400', 'claim'), ('886924959462', 'claim'), ('887620624175', 'claim'),
+                    ('888398422426', 'claim'), ('886149507488', 'claim'), ('888237262990', 'claim'), ('482244355467', 'claim'), ('440231767580', 'claim'),
+                    ('888398194450', 'claim'), ('887862002132', 'claim'), ('482244347610', 'claim'), ('440231771300', 'claim'), ('887332465830', 'claim'),
+                    ('887620526830', 'claim'), ('440231764547', 'claim'), ('887332469089', 'claim'), ('457620943017', 'claim'), ('457620956337', 'claim'),
+                    ('887379667160', 'claim'), ('887397890266', 'claim'), ('888018561020', 'claim'), ('887332687808', 'claim'), ('440231769928', 'claim'),
+                    ('887732039476', 'claim'), ('886924970250', 'claim'), ('888051895231', 'claim'), ('482244336900', 'claim'), ('888398474695', 'claim'),
+                    ('887765610247', 'claim'), ('887112955078', 'claim'), ('440231770325', 'claim'), ('440231760520', 'claim'), ('888398416556', 'claim'),
+                    ('482244375263', 'claim'), ('887765627985', 'claim'), ('887732013579', 'claim'), ('886638078391', 'claim'), ('886149582575', 'claim'),
+                    ('440231762350', 'claim'), ('887620576489', 'claim'), ('887620576673', 'claim'), ('482244374727', 'claim'), ('887861989176', 'claim'),
+                    ('440231767097', 'claim'), ('886338658148', 'claim'), ('482244340659', 'claim'), ('887861839731', 'claim'), ('888237424836', 'claim'),
+                    ('888437045519', 'claim'), ('888437046283', 'claim'), ('457620946461', 'claim'), ('886227916562', 'claim'), ('457620952630', 'claim'),
+                    ('482244374554', 'claim'), ('482244367508', 'claim'), ('440231762990', 'claim'), ('888206029768', 'claim'), ('887861846814', 'claim'),
+                    ('886338515863', 'claim'), ('887507432476', 'claim'), ('440231760037', 'claim'), ('482244352137', 'claim'), ('888604860400', 'claim'),
+                    ('440231757291', 'claim'), ('440231769560', 'claim'), ('482244349347', 'claim'), ('482244355250', 'claim'), ('457620974211', 'claim'),
+                    ('888721703495', 'claim'), ('482244352159', 'claim'), ('482244345319', 'claim'), ('457620984407', 'claim')
+            ON CONFLICT (tracking_number) DO NOTHING
+            """
+            self.cursor.execute(excluded_insert_query)
+            logger.debug(f"Inserted/verified 119 excluded shipments")
+
             self.conn.commit()
             logger.info("All required tables verified/created successfully")
             return True
