@@ -43,6 +43,7 @@ class DBManager:
             self.conn = psycopg2.connect(self.database_url)
             self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
             logger.info("Database connection established")
+            self.ensure_tables_exist()
             return True
         except psycopg2.Error as e:
             logger.error(f"Database connection failed: {e}")
