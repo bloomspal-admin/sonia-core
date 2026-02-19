@@ -1,9 +1,8 @@
-"""Load additional excluded tracking numbers from text files."""
+"""Load additional excluded tracking numbers from text files and unknown shipments."""
 import os
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 def load_exclusions_from_files(conn):
     """Read tracking numbers from excluded_tracking_*.txt files and insert into excluded_shipments."""
@@ -32,4 +31,27 @@ def load_exclusions_from_files(conn):
                     conn.rollback()
                 except:
                     pass
+
+    # Also exclude all shipments with unknown status
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO excluded_shipments (tracking_number, reason)
+            SELECT tracking_number, 'unknown_status'
+            FROM shipments
+            WHERE sonia_status = 'unknown'
+            AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
+        """)
+        unknown_count = cursor.rowcount
+        conn.commit()
+        if unknown_count > 0:
+            loaded += unknown_count
+            logger.info(f"Excluded {unknown_count} shipments with unknown status")
+    except Exception as e:
+        logger.warning(f"Could not exclude unknown shipments: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+
     return loaded
