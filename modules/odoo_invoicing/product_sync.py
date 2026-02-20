@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Tenants whose products are already in warehouse (storable)
 STORABLE_BRANDS = {"Dios Mio Coffee", "GAVI", "Hacienda Venecia", "1830 Coffee"}
 
-# ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Embedded Product Data (from Bloomspal Data.xlsx) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+# ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Embedded Product Data (from Bloomspal Data.xlsx) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
 
 PRODUCTS = [
     {"sku": "DMC12BDGS", "name": "Dark roast Ground coffee 12 oz", "description": "Ground coffee", "declared_value": 3.36, "cost": 13.0, "gross_weight": 0.358, "net_weight": 0.34, "hs_code": "Duty Free - 09012100", "brand": "Dios Mio Coffee", "category": "Bolsa 340gr", "bill_category": "Roasted Coffe - 340 Gr Bolsa Ground", "product_type": "SINGLE"},
@@ -276,7 +276,7 @@ def sync_products_to_odoo(
 
     if dry_run:
         for p in products_to_sync:
-            odoo_type = "goods"
+            odoo_type = "consu"
             results["details"].append({
                 "sku": p["sku"],
                 "name": p["name"],
@@ -290,7 +290,7 @@ def sync_products_to_odoo(
 
     for p in products_to_sync:
         try:
-            odoo_type = "goods"
+            odoo_type = "consu"
 
             # Search if product already exists
             existing = odoo._execute(
@@ -315,7 +315,6 @@ def sync_products_to_odoo(
                 "name": p["name"],
                 "default_code": p["sku"],
                 "type": odoo_type,
-                "is_storable": p["brand"] in STORABLE_BRANDS,
                 "sale_ok": True,
                 "purchase_ok": True,
                 "list_price": p["declared_value"],
