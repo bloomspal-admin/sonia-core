@@ -1,5 +1,5 @@
 """
-Odoo XML-RPC client for creating products and invoices.
+Odoo XML-RPC client for creating products and sale orders.
 Uses XML-RPC because it's the most stable and well-documented Odoo API.
 Compatible with Odoo 16, 17, and 18.
 """
@@ -15,7 +15,7 @@ class OdooClient:
     """
     Handles all Odoo operations via XML-RPC:
     - Product creation (product.product / product.template)
-    - Invoice creation (account.move)
+    - Sale Order creation (sale.order)
     - Partner lookup (res.partner)
     """
 
@@ -48,44 +48,43 @@ class OdooClient:
             self.db, self.uid, self.api_key, model, method, *args, **kwargs
         )
 
-    # ─── Partner (Dropshipper/Client) ──────────────────────────
+    # ——— Partner (Dropshipper/Client) ————————————————————————
 
-    def find_or_create_partner(self, name: str, email: str = "") -> int:
+    def find_or_create_partner(self, name: str, vat: str = "", email: str = "") -> int:
         """
-        Find a partner (dropshipper) by name, or create if not exists.
-        Returns the partner ID.
+        Find a partner by name, or create if not exists.
+        Partners are created as companies (is_company=True).
+        Returns the res.partner ID.
         """
         if name in self._partner_cache:
             return self._partner_cache[name]
 
-        # Search by name
         partner_ids = self._execute(
             "res.partner", "search",
-            [[["name", "=", name]]],
+            [[["name", "=", name], ["is_company", "=", True]]],
         )
 
         if partner_ids:
             partner_id = partner_ids[0]
-            logger.debug(f"Found existing partner: {name} (ID={partner_id})")
+            logger.info(f"Found partner: {name} (ID={partner_id})")
         else:
-            # Create new partner
-            partner_id = self._execute(
-                "res.partner", "create",
-                [{
-                    "name": name,
-                    "email": email,
-                    "is_company": True,
-                    "customer_rank": 1,
-                    "supplier_rank": 0,
-                    "comment": "Auto-created by SonIA Daily Invoicing",
-                }],
-            )
-            logger.info(f"Created new partner: {name} (ID={partner_id})")
+            partner_vals = {
+                "name": name,
+                "is_company": True,
+                "customer_rank": 1,
+            }
+            if vat:
+                partner_vals["vat"] = vat
+            if email:
+                partner_vals["email"] = email
+
+            partner_id = self._execute("res.partner", "create", [partner_vals])
+            logger.info(f"Created partner: {name} (ID={partner_id})")
 
         self._partner_cache[name] = partner_id
         return partner_id
 
-    # ─── Products ──────────────────────────────────────────────
+    # ——— Products ——————————————————————————————————————————
 
     def find_or_create_product(
         self,
@@ -107,7 +106,6 @@ class OdooClient:
         if cache_key in self._product_cache:
             return self._product_cache[cache_key]
 
-        # Search by default_code (SKU) - could also filter by brand
         product_ids = self._execute(
             "product.product", "search",
             [[["default_code", "=", sku]]],
@@ -115,170 +113,186 @@ class OdooClient:
 
         if product_ids:
             product_id = product_ids[0]
-            logger.debug(f"Found existing product: {sku} (ID={product_id})")
-            # Update brand if needed
-            if brand:
-                self._execute(
-                    "product.product", "write",
-                    [[product_id], {"x_brand": brand}],
-                )
-        else:
-            # Prepare product values
-            product_vals = {
-                "name": name or sku,
-                "default_code": sku,
-                "type": "consu",  # Consumable for now (change to 'product' if storable needed)
-                "standard_price": cost,
-                "weight": weight,
-                "sale_ok": True,
-                "purchase_ok": True,
-                "description": f"Auto-created by SonIA - Brand: {brand}",
-            }
+            logger.info(f"Found product: {sku} (ID={product_id})")
+            self._product_cache[cache_key] = product_id
+            return product_id
 
-            # Add HS code if available (for customs/international)
-            if hs_code:
-                product_vals["hs_code"] = hs_code
+        # Create new product
+        product_vals = {
+            "name": name,
+            "default_code": sku,
+            "type": "consu",  # Consumable (MTO)
+            "sale_ok": True,
+            "purchase_ok": False,
+            "list_price": cost,
+            "weight": weight,
+        }
+        if hs_code:
+            product_vals["hs_code"] = hs_code
 
-            # Try to set brand as custom field
-            if brand:
-                product_vals["x_brand"] = brand
-
+        # Try to set brand field (x_studio_brand or x_brand)
+        if brand:
             try:
-                product_id = self._execute(
-                    "product.product", "create",
-                    [product_vals],
-                )
-                logger.info(f"Created product: {sku} - {name} (ID={product_id})")
-            except Exception as e:
-                # If x_brand field doesn't exist, retry without it
-                if "x_brand" in str(e):
-                    logger.warning(
-                        "x_brand field not found in Odoo. Creating product without brand. "
-                        "Consider adding a custom field 'x_brand' to product.product."
-                    )
-                    product_vals.pop("x_brand", None)
-                    product_vals["description"] = f"Brand: {brand} | {product_vals.get('description', '')}"
-                    product_id = self._execute(
-                        "product.product", "create",
-                        [product_vals],
-                    )
+                product_vals["x_studio_brand"] = brand
+                product_id = self._execute("product.product", "create", [product_vals])
+                logger.info(f"Created product with brand: {sku} (ID={product_id})")
+            except Exception:
+                del product_vals["x_studio_brand"]
+                try:
+                    product_vals["x_brand"] = brand
+                    product_id = self._execute("product.product", "create", [product_vals])
+                    logger.info(f"Created product with x_brand: {sku} (ID={product_id})")
+                except Exception:
+                    if "x_brand" in product_vals:
+                        del product_vals["x_brand"]
+                    product_id = self._execute("product.product", "create", [product_vals])
                     logger.info(f"Created product (no brand field): {sku} (ID={product_id})")
-                else:
-                    raise
+        else:
+            product_id = self._execute("product.product", "create", [product_vals])
+            logger.info(f"Created product: {sku} (ID={product_id})")
 
         self._product_cache[cache_key] = product_id
         return product_id
 
-    def find_or_create_logistics_product(self) -> Dict[str, int]:
+    def find_logistics_products(self) -> Dict[str, int]:
         """
-        Ensure the logistics service products exist in Odoo:
-        - 'LOGISTICS-WEIGHT': Costo logístico por peso (per kg)
-        - 'LOGISTICS-ADDRESS': Address fee (per order)
-        Returns dict with product IDs.
+        Find the logistics service products that already exist in Odoo:
+        - 'International Freight (Flete)': Costo logistico por peso (per kg) @ $6.50
+        - 'Address Fee': Fee per address/order @ $8.00
+
+        Returns dict with product IDs keyed by type:
+            {"freight": product_id, "address_fee": product_id}
+
+        Raises ValueError if products not found in Odoo.
         """
         products = {}
 
-        for sku, name, price in [
-            ("LOGISTICS-WEIGHT-KG", "Costo Logístico por Peso (por Kg)", 6.5),
-            ("LOGISTICS-ADDRESS-FEE", "Address Fee (por Orden)", 8.0),
-        ]:
-            product_ids = self._execute(
+        # Search for International Freight product
+        freight_ids = self._execute(
+            "product.product", "search",
+            [[["name", "ilike", "International Freight"]]],
+        )
+        if not freight_ids:
+            # Fallback: search by partial name
+            freight_ids = self._execute(
                 "product.product", "search",
-                [[["default_code", "=", sku]]],
+                [[["name", "ilike", "Flete"]]],
             )
-            if product_ids:
-                products[sku] = product_ids[0]
-            else:
-                product_id = self._execute(
-                    "product.product", "create",
-                    [{
-                        "name": name,
-                        "default_code": sku,
-                        "type": "service",
-                        "list_price": price,
-                        "standard_price": price,
-                        "sale_ok": True,
-                        "purchase_ok": False,
-                        "description": "Producto de servicio logístico - SonIA",
-                    }],
-                )
-                products[sku] = product_id
-                logger.info(f"Created logistics product: {sku} (ID={product_id})")
+        if not freight_ids:
+            raise ValueError(
+                "Product 'International Freight (Flete)' not found in Odoo. "
+                "Please create it manually before running invoicing."
+            )
+        products["freight"] = freight_ids[0]
+
+        # Read price to log it
+        freight_data = self._execute(
+            "product.product", "read",
+            [freight_ids[:1], ["name", "list_price", "default_code"]],
+        )
+        logger.info(
+            f"Found freight product: {freight_data[0]['name']} "
+            f"(ID={freight_ids[0]}, price={freight_data[0]['list_price']})"
+        )
+
+        # Search for Address Fee product
+        addr_ids = self._execute(
+            "product.product", "search",
+            [[["name", "ilike", "Address Fee"]]],
+        )
+        if not addr_ids:
+            raise ValueError(
+                "Product 'Address Fee' not found in Odoo. "
+                "Please create it manually before running invoicing."
+            )
+        products["address_fee"] = addr_ids[0]
+
+        addr_data = self._execute(
+            "product.product", "read",
+            [addr_ids[:1], ["name", "list_price", "default_code"]],
+        )
+        logger.info(
+            f"Found address fee product: {addr_data[0]['name']} "
+            f"(ID={addr_ids[0]}, price={addr_data[0]['list_price']})"
+        )
 
         return products
 
-    # ─── Invoices ──────────────────────────────────────────────
+    # ——— Sale Orders ——————————————————————————————————————
 
-    def create_invoice(
+    def create_sale_order(
         self,
         partner_id: int,
-        invoice_lines: List[Dict[str, Any]],
+        order_lines: List[Dict[str, Any]],
         reference: str = "",
-        narration: str = "",
+        note: str = "",
     ) -> Dict[str, Any]:
         """
-        Create a customer invoice (account.move) in Odoo.
+        Create a Sale Order (sale.order) in Odoo.
 
         Args:
             partner_id: Odoo partner ID (the dropshipper/client)
-            invoice_lines: List of dicts with line items
-            reference: Invoice reference text
-            narration: Internal notes
+            order_lines: List of dicts with line items:
+                - product_id (int): Odoo product ID
+                - description (str): Line description
+                - quantity (float): Quantity
+                - price_unit (float): Unit price
+            reference: Client reference text
+            note: Internal notes
 
         Returns:
-            Dict with 'id' and 'name' of the created invoice
+            Dict with 'id', 'name', 'amount_total', 'state' of the created SO
         """
-        # Build invoice line commands (Odoo one2many format: (0, 0, vals))
         line_commands = []
-        for line in invoice_lines:
+        for line in order_lines:
             line_vals = {
                 "product_id": line["product_id"],
                 "name": line.get("description", ""),
-                "quantity": line.get("quantity", 1),
-                "price_unit": line.get("price_unit", 0),
+                "product_uom_qty": line["quantity"],
+                "price_unit": line["price_unit"],
             }
-            # Add account if specified
-            if line.get("account_id"):
-                line_vals["account_id"] = line["account_id"]
-
             line_commands.append((0, 0, line_vals))
 
-        invoice_vals = {
-            "move_type": "out_invoice",  # Customer Invoice
+        order_vals = {
             "partner_id": partner_id,
-            "invoice_line_ids": line_commands,
-            "ref": reference,
-            "narration": narration,
+            "order_line": line_commands,
+            "client_order_ref": reference,
+            "note": note,
         }
 
-        invoice_id = self._execute("account.move", "create", [invoice_vals])
+        order_id = self._execute("sale.order", "create", [order_vals])
 
-        # Get the invoice name/number
-        invoice_data = self._execute(
-            "account.move", "read",
-            [[invoice_id], ["name", "amount_total", "state"]],
+        # Read the SO details
+        order_data = self._execute(
+            "sale.order", "read",
+            [[order_id], ["name", "amount_total", "state"]],
         )
 
-        invoice_name = invoice_data[0]["name"] if invoice_data else f"INV-{invoice_id}"
-        amount_total = invoice_data[0]["amount_total"] if invoice_data else 0
+        order_name = order_data[0]["name"] if order_data else f"SO-{order_id}"
+        amount_total = order_data[0]["amount_total"] if order_data else 0
+        state = order_data[0]["state"] if order_data else "draft"
 
         logger.info(
-            f"Created invoice {invoice_name} (ID={invoice_id}) "
-            f"for partner {partner_id}, total=${amount_total:.2f}"
+            f"Created Sale Order {order_name} (ID={order_id}) "
+            f"for partner {partner_id}, total=${amount_total:.2f}, state={state}"
         )
 
         return {
-            "id": invoice_id,
-            "name": invoice_name,
+            "id": order_id,
+            "name": order_name,
             "amount_total": amount_total,
-            "state": invoice_data[0].get("state", "draft") if invoice_data else "draft",
+            "state": state,
         }
 
-    def get_default_income_account(self) -> Optional[int]:
-        """Get the default income account for invoice lines."""
-        accounts = self._execute(
-            "account.account", "search",
-            [[["account_type", "=", "income"]]],
-            {"limit": 1},
-        )
-        return accounts[0] if accounts else None
+    def confirm_sale_order(self, order_id: int) -> bool:
+        """
+        Confirm a draft sale order (draft -> sale).
+        Returns True if confirmed successfully.
+        """
+        try:
+            self._execute("sale.order", "action_confirm", [[order_id]])
+            logger.info(f"Confirmed sale order ID={order_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to confirm SO {order_id}: {e}")
+            return False
