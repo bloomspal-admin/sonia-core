@@ -34,10 +34,11 @@ from modules.report_generator import ReportGenerator
 from modules.whatsapp_sender import WhatsAppSender
 from modules.odoo_client import OdooClient
 from modules.odoo_invoicing import run_daily_invoicing
+from modules.odoo_invoicing.product_sync import sync_products_to_odoo
 from modules.excel_generator import ExcelReportGenerator
 from modules.email_sender import EmailSender
 
-# ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Logging ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+# ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Logging ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("sonia-core")
 
@@ -346,7 +347,7 @@ async def run_daily_flow(modules: dict):
     total_active_packages = 0  # Total non-delivered packages across all tenants
 
     try:
-        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 1: Read from DynamoDB ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 1: Read from DynamoDB ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "reading_dynamodb"
         logger.info("Step 1: Reading shipments from DynamoDB...")
         raw_shipments = []
@@ -384,7 +385,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 2: Group by tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 2: Group by tenant ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "grouping_by_tenant"
         logger.info("Step 2: Grouping shipments by tenant...")
         tenant_groups = defaultdict(list)
@@ -408,7 +409,7 @@ async def run_daily_flow(modules: dict):
 
         flow_progress["packages_total"] = total_active_packages
 
-        # ÃÂÃÂÃÂÃÂ Step 3: Load tenant data from Odoo spreadsheet ÃÂÃÂÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 3: Load tenant data from Odoo spreadsheet ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "loading_odoo_spreadsheet"
         logger.info("Step 3: Loading tenant data from Odoo WhatsApp BBDD spreadsheet...")
         odoo = modules.get("odoo")
@@ -462,7 +463,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 4: Process each tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 4: Process each tenant ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "processing_tenants"
         logger.info("Step 4: Processing tenants...")
         tenant_list = list(tenant_groups.items())
@@ -524,7 +525,7 @@ async def run_daily_flow(modules: dict):
                 )
                 stats["alerts_sent"] += 1
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generate consolidated Excel report ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate consolidated Excel report ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         excel_gen = modules.get("excel_gen")
         if excel_gen and db:
             try:
@@ -558,7 +559,7 @@ async def run_daily_flow(modules: dict):
                 logger.error(f"Error generating consolidated Excel: {e}")
 
 
-        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Finalize ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Finalize ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "finalizing"
         status = "success" if not errors else "partial"
         db.update_run_log(run_id, stats, errors, status)
@@ -619,7 +620,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
     logger.info(f"--- Processing Tenant #{tenant_id}: {tenant_name} ({len(reserves)} reserves) ---")
     flow_progress["tenant_current"] = f"{tenant_name} (#{tenant_id})"
 
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Get delivered tracking numbers from shipments table ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Get delivered tracking numbers from shipments table ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
     delivered_tracking = set()
     try:
         undelivered = db.get_undelivered_shipments()
@@ -650,7 +651,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
 
     logger.info(f"Tenant #{tenant_id}: {len(all_tracking)} total packages, {len(active_tracking)} active, {len(delivered_tracking)} already delivered")
 
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Store shipments in PostgreSQL ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Store shipments in PostgreSQL ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
     # Get or create client in DB
     client_info = db.get_client_by_tenant(tenant_id)
     client_db_id = client_info.get("client_id") if client_info else None
@@ -679,7 +680,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
         stats["tenants_no_whatsapp"] += 1
         stats["alerts_sent"] += 1
 
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Query FedEx for active tracking numbers ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Query FedEx for active tracking numbers ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
     if fedex and active_tracking:
         logger.info(f"Querying FedEx for {len(active_tracking)} active packages...")
         batch_size = 30
@@ -716,7 +717,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["alerts_sent"] += 1
 
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Detect anomalies ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Detect anomalies ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
     if anomaly_detector and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -742,7 +743,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 "error": str(e),
             })
 
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate report ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Generate report ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
     if report_gen and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -753,7 +754,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["reports_generated"] += 1
 
-                # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Send report via WhatsApp ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+                # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Send report via WhatsApp ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
                 if whatsapp and whatsapp_numbers:
                     for phone_number in whatsapp_numbers:
                         try:
@@ -785,7 +786,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                             )
                             stats["alerts_sent"] += 1
 
-                # Ã¢ÂÂÃ¢ÂÂ Send report via Email Ã¢ÂÂÃ¢ÂÂ
+                # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Send report via Email ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
                 email_sender = modules.get("email")
                 if email_sender and email_addresses:
                     for email_addr in email_addresses:
@@ -814,7 +815,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
             })
 
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generate Excel report per tenant ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate Excel report per tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     excel_gen = modules.get("excel_gen")
     if excel_gen and client_db_id:
         try:
@@ -1118,6 +1119,47 @@ async def invoicing_run():
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
+
+
+@app.post("/admin/sync-products")
+async def sync_products(limit: int = 0, brand: str = "", dry_run: bool = True):
+    """
+    Sync products from BloomsPal Excel data to Odoo.
+    
+    - limit=0 means all products (199)
+    - brand="" means all brands (filter by exact brand name)
+    - dry_run=True means preview only (no actual creation)
+    
+    Usage:
+      Preview all:     POST /admin/sync-products?dry_run=true
+      Preview 1:       POST /admin/sync-products?limit=1&dry_run=true
+      Create 1 test:   POST /admin/sync-products?limit=1&dry_run=false
+      Create all DMC:  POST /admin/sync-products?brand=Dios%20Mio%20Coffee&dry_run=false
+      Create all:      POST /admin/sync-products?dry_run=false
+    """
+    from modules.odoo_invoicing.config import ODOO_URL, ODOO_DB, ODOO_USER, ODOO_API_KEY
+    from modules.odoo_invoicing.odoo_client import OdooClient
+    
+    try:
+        odoo = OdooClient(ODOO_URL, ODOO_DB, ODOO_USER, ODOO_API_KEY)
+        odoo.connect()
+        
+        results = sync_products_to_odoo(
+            odoo=odoo,
+            limit=limit,
+            brand_filter=brand,
+            dry_run=dry_run,
+        )
+        
+        return {
+            "status": "success",
+            "dry_run": dry_run,
+            "results": results,
+            "timestamp": datetime.now(COT).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Product sync error: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
 
 @app.post("/admin/sync-tenants")
 async def admin_sync_tenants(data: Dict[str, Any]):

@@ -40,7 +40,7 @@ from .config import (
 )
 from .odoo_client import OdooClient
 from .corte_reader import CorteReader, CorteData, ParsedCorte
-from .box_weights import get_box_weight, BOX_WEIGHTS
+from .box_weights import get_box_weight, BOX_WEIGHTS, round_freight_weight
 from .db_tracking import TrackingDB
 
 logging.basicConfig(
@@ -136,13 +136,15 @@ def build_order_lines(
     total_logistics = 0.0
     total_orders = len(total_orders_set)
 
-    # Weight cost: total_weight_kg * COST_PER_KG ($6.50/kg)
-    weight_cost = total_weight * COST_PER_KG
+    # Weight cost: apply BloomsPal rounding rules then multiply
+    # Rule: <1kg = 1kg, >=1kg round up to next 0.5kg
+    billable_weight = round_freight_weight(total_weight)
+    weight_cost = billable_weight * COST_PER_KG
     if weight_cost > 0:
         order_lines.append({
             "product_id": logistics_products.get("freight"),
-            "description": f"International Freight (Flete): {total_weight:.3f} kg x ${COST_PER_KG}/kg",
-            "quantity": round(total_weight, 3),
+            "description": f"International Freight (Flete): {total_weight:.3f} kg (cobrado: {billable_weight:.1f} kg) x ${COST_PER_KG}/kg",
+            "quantity": billable_weight,
             "price_unit": COST_PER_KG,
         })
         total_logistics += weight_cost
