@@ -1,5 +1,5 @@
 """
-Box type → weight reference table.
+Box type â weight reference table.
 Maps box types from warehouse reports to their weight in kilograms.
 Data source: Bloomspal Data.xlsx "Cajas" sheet.
 """
@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ——— Box Type → Weight (kg) ——————————————————————————————————————
+# âââ Box Type â Weight (kg) ââââââââââââââââââââââââââââââââââââââ
 # Keys: box name as it appears in warehouse Excel files.
 BOX_WEIGHTS: dict[str, float] = {
     "CAJA MASTER 1830 COFFEE": 0.068,  # 1830 Coffee
@@ -19,7 +19,7 @@ BOX_WEIGHTS: dict[str, float] = {
     "CAJA MASTER CBTB": 0.12,  # Coffee by the Bag
     "CAJA GRANDE": 0.139,  # Dios Mio Coffee
     "CAJA MEDIANA": 0.136,  # Dios Mio Coffee
-    "CAJA PEQUEÃ‘A": 0.092,  # Dios Mio Coffee
+    "CAJA PEQUEÃâA": 0.092,  # Dios Mio Coffee
     "CAJA KIT": 2.348,  # Dios Mio Coffee
     "CAJA MASTER DON MAIZ": 0.2,  # Don Maiz
     "CAJA MASTER": 0.12,  # Eden flowers
@@ -42,7 +42,7 @@ BOX_FREIGHT_COSTS: dict[str, float] = {
     "CAJA MASTER CBTB": 4.0,
     "CAJA GRANDE": 6.0,
     "CAJA MEDIANA": 6.0,
-    "CAJA PEQUEÃ‘A": 4.0,
+    "CAJA PEQUEÃâA": 4.0,
     "CAJA KIT": 12.0,
     "CAJA MASTER DON MAIZ": 5.0,
     "CAJA MASTER": 4.0,
@@ -57,26 +57,12 @@ BOX_FREIGHT_COSTS: dict[str, float] = {
 # Default weight if box type not found
 DEFAULT_BOX_WEIGHT = 0.12  # kg (typical master box)
 
-# ——— Freight pricing ————————————————————————————————————————
+# âââ Freight pricing ââââââââââââââââââââââââââââââââââââââââ
 COST_PER_KG = 6.5   # USD per kg for International Freight
 ADDRESS_FEE = 8.0    # USD per unique order/address
 
 
-import math
 
-def round_freight_weight(weight_kg: float) -> float:
-    """
-    Round weight for freight billing per BloomsPal rules:
-    - Less than 1 kg → billed as 1 kg
-    - 1 kg or more → round UP to the next 0.5 kg
-      Examples: 2.3 → 2.5, 2.5 → 2.5, 2.6 → 3.0, 3.0 → 3.0
-    """
-    if weight_kg <= 0:
-        return 0.0
-    if weight_kg < 1.0:
-        return 1.0
-    # Round up to next 0.5
-    return math.ceil(weight_kg * 2) / 2
 
 
 def get_box_weight(box_type: str, db_weights: dict = None) -> float:

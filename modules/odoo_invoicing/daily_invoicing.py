@@ -40,7 +40,7 @@ from .config import (
 )
 from .odoo_client import OdooClient
 from .corte_reader import CorteReader, CorteData, ParsedCorte
-from .box_weights import get_box_weight, BOX_WEIGHTS, round_freight_weight
+from .box_weights import get_box_weight, BOX_WEIGHTS
 from .db_tracking import TrackingDB
 
 logging.basicConfig(
@@ -138,7 +138,7 @@ def build_order_lines(
 
     # Weight cost: apply BloomsPal rounding rules then multiply
     # Rule: <1kg = 1kg, >=1kg round up to next 0.5kg
-    billable_weight = round_freight_weight(total_weight)
+    billable_weight = total_weight
     weight_cost = billable_weight * COST_PER_KG
     if weight_cost > 0:
         order_lines.append({
