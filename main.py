@@ -33,10 +33,11 @@ from modules.anomaly_detector import AnomalyDetector
 from modules.report_generator import ReportGenerator
 from modules.whatsapp_sender import WhatsAppSender
 from modules.odoo_client import OdooClient
+from modules.odoo_invoicing import run_daily_invoicing
 from modules.excel_generator import ExcelReportGenerator
 from modules.email_sender import EmailSender
 
-# ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Logging ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+# ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Logging ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("sonia-core")
 
@@ -345,7 +346,7 @@ async def run_daily_flow(modules: dict):
     total_active_packages = 0  # Total non-delivered packages across all tenants
 
     try:
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Step 1: Read from DynamoDB ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 1: Read from DynamoDB ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "reading_dynamodb"
         logger.info("Step 1: Reading shipments from DynamoDB...")
         raw_shipments = []
@@ -383,7 +384,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Step 2: Group by tenant ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 2: Group by tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "grouping_by_tenant"
         logger.info("Step 2: Grouping shipments by tenant...")
         tenant_groups = defaultdict(list)
@@ -407,7 +408,7 @@ async def run_daily_flow(modules: dict):
 
         flow_progress["packages_total"] = total_active_packages
 
-        # ÃÂÃÂ Step 3: Load tenant data from Odoo spreadsheet ÃÂÃÂ
+        # ÃÂÃÂÃÂÃÂ Step 3: Load tenant data from Odoo spreadsheet ÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "loading_odoo_spreadsheet"
         logger.info("Step 3: Loading tenant data from Odoo WhatsApp BBDD spreadsheet...")
         odoo = modules.get("odoo")
@@ -461,7 +462,7 @@ async def run_daily_flow(modules: dict):
             flow_progress["running"] = False
             return
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Step 4: Process each tenant ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Step 4: Process each tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "processing_tenants"
         logger.info("Step 4: Processing tenants...")
         tenant_list = list(tenant_groups.items())
@@ -523,7 +524,7 @@ async def run_daily_flow(modules: dict):
                 )
                 stats["alerts_sent"] += 1
 
-        # Ã¢ÂÂÃ¢ÂÂ Generate consolidated Excel report Ã¢ÂÂÃ¢ÂÂ
+        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generate consolidated Excel report ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
         excel_gen = modules.get("excel_gen")
         if excel_gen and db:
             try:
@@ -557,7 +558,7 @@ async def run_daily_flow(modules: dict):
                 logger.error(f"Error generating consolidated Excel: {e}")
 
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Finalize ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Finalize ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         flow_progress["phase"] = "finalizing"
         status = "success" if not errors else "partial"
         db.update_run_log(run_id, stats, errors, status)
@@ -618,7 +619,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
     logger.info(f"--- Processing Tenant #{tenant_id}: {tenant_name} ({len(reserves)} reserves) ---")
     flow_progress["tenant_current"] = f"{tenant_name} (#{tenant_id})"
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Get delivered tracking numbers from shipments table ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Get delivered tracking numbers from shipments table ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     delivered_tracking = set()
     try:
         undelivered = db.get_undelivered_shipments()
@@ -649,7 +650,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
 
     logger.info(f"Tenant #{tenant_id}: {len(all_tracking)} total packages, {len(active_tracking)} active, {len(delivered_tracking)} already delivered")
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Store shipments in PostgreSQL ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Store shipments in PostgreSQL ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     # Get or create client in DB
     client_info = db.get_client_by_tenant(tenant_id)
     client_db_id = client_info.get("client_id") if client_info else None
@@ -678,7 +679,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
         stats["tenants_no_whatsapp"] += 1
         stats["alerts_sent"] += 1
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Query FedEx for active tracking numbers ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Query FedEx for active tracking numbers ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     if fedex and active_tracking:
         logger.info(f"Querying FedEx for {len(active_tracking)} active packages...")
         batch_size = 30
@@ -715,7 +716,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["alerts_sent"] += 1
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Detect anomalies ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Detect anomalies ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     if anomaly_detector and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -741,7 +742,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 "error": str(e),
             })
 
-    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generate report ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate report ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
     if report_gen and client_db_id:
         try:
             client_shipments = db.get_shipments_by_client(client_db_id)
@@ -752,7 +753,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                 )
                 stats["reports_generated"] += 1
 
-                # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Send report via WhatsApp ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+                # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Send report via WhatsApp ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
                 if whatsapp and whatsapp_numbers:
                     for phone_number in whatsapp_numbers:
                         try:
@@ -784,7 +785,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
                             )
                             stats["alerts_sent"] += 1
 
-                # ââ Send report via Email ââ
+                # Ã¢ÂÂÃ¢ÂÂ Send report via Email Ã¢ÂÂÃ¢ÂÂ
                 email_sender = modules.get("email")
                 if email_sender and email_addresses:
                     for email_addr in email_addresses:
@@ -813,7 +814,7 @@ async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: Li
             })
 
 
-    # Ã¢ÂÂÃ¢ÂÂ Generate Excel report per tenant Ã¢ÂÂÃ¢ÂÂ
+    # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Generate Excel report per tenant ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
     excel_gen = modules.get("excel_gen")
     if excel_gen and client_db_id:
         try:
@@ -896,6 +897,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
+
+    # Schedule daily invoicing (Mon-Fri at 17:00 COT)
+    scheduler.add_job(
+        _run_invoicing_safe,
+        CronTrigger(hour=17, minute=0, day_of_week="mon-fri", timezone=COT),
+        id="daily_invoicing",
+        name="Odoo Daily Invoicing (17:00 COT Mon-Fri)",
+        replace_existing=True,
+    )
+    logger.info("Invoicing scheduler added - Mon-Fri at 17:00 COT")
     logger.info(f"Scheduler started - daily flow at {run_hour}:00 COT")
 
     yield
@@ -913,6 +924,35 @@ app = FastAPI(
     version="1.2.0",
     lifespan=lifespan,
 )
+
+
+# ============================================================================
+# INVOICING
+# ============================================================================
+
+invoicing_progress = {"running": False, "last_run": None, "last_error": None}
+
+
+async def _run_invoicing_safe():
+    """Run daily invoicing with error handling (for scheduler)."""
+    global invoicing_progress
+    if invoicing_progress["running"]:
+        logger.warning("Invoicing already running, skipping")
+        return
+    invoicing_progress["running"] = True
+    try:
+        logger.info("=== Starting scheduled invoicing run ===")
+        import asyncio
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, run_daily_invoicing)
+        invoicing_progress["last_run"] = datetime.now(COT).isoformat()
+        invoicing_progress["last_error"] = None
+        logger.info("=== Scheduled invoicing completed ===")
+    except Exception as e:
+        invoicing_progress["last_error"] = str(e)
+        logger.error(f"Invoicing failed: {e}", exc_info=True)
+    finally:
+        invoicing_progress["running"] = False
 
 
 # ============================================================================
@@ -991,6 +1031,88 @@ async def admin_run_now():
     import asyncio
     asyncio.create_task(run_daily_flow(modules))
     return {"status": "started", "timestamp": datetime.now(COT).isoformat()}
+
+
+
+# ============================================================================
+# INVOICING ADMIN ENDPOINTS
+# ============================================================================
+
+@app.get("/admin/invoicing/status")
+async def invoicing_status():
+    """Check invoicing scheduler status and last run info."""
+    return {
+        "running": invoicing_progress["running"],
+        "last_run": invoicing_progress["last_run"],
+        "last_error": invoicing_progress["last_error"],
+        "schedule": "Mon-Fri 17:00 COT",
+        "timestamp": datetime.now(COT).isoformat(),
+    }
+
+
+@app.post("/admin/invoicing/preview")
+async def invoicing_preview():
+    """Preview: show unprocessed cortes without creating invoices."""
+    try:
+        from modules.odoo_invoicing.config import (
+            AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+            DYNAMO_TABLE_CARRIER_REPORTS, DYNAMO_TABLE_FEDEX_CONSOLIDATIONS,
+            SONIA_DB_URL,
+        )
+        from modules.odoo_invoicing.db_tracking import TrackingDB
+        from modules.odoo_invoicing.corte_reader import CorteReader
+
+        tracking = TrackingDB(SONIA_DB_URL)
+        tracking.connect()
+        tracking.initialize_tables()
+        processed_ids = tracking.get_processed_corte_ids()
+
+        reader = CorteReader(
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            aws_region=AWS_REGION,
+            carrier_reports_table=DYNAMO_TABLE_CARRIER_REPORTS,
+            fedex_consolidations_table=DYNAMO_TABLE_FEDEX_CONSOLIDATIONS,
+        )
+        new_cortes = reader.fetch_unprocessed_cortes(processed_ids)
+        tracking.close()
+
+        from collections import defaultdict
+        by_tenant = defaultdict(list)
+        for ct in new_cortes:
+            by_tenant[ct.tenant].append(ct)
+
+        preview = {
+            "total_unprocessed_cortes": len(new_cortes),
+            "already_processed": len(processed_ids),
+            "tenants": {
+                str(tid): {
+                    "cortes_count": len(cortes),
+                    "tenant_name": cortes[0].tenant_name or f"Tenant-{tid}",
+                    "corte_ids": [ct.corte_id for ct in cortes],
+                }
+                for tid, cortes in by_tenant.items()
+            },
+            "timestamp": datetime.now(COT).isoformat(),
+        }
+        return preview
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+
+
+@app.post("/admin/invoicing/run")
+async def invoicing_run():
+    """Run invoicing now (creates real invoices in Odoo)."""
+    global invoicing_progress
+    if invoicing_progress["running"]:
+        raise HTTPException(status_code=409, detail="Invoicing is already running")
+    import asyncio
+    asyncio.create_task(_run_invoicing_safe())
+    return {
+        "status": "started",
+        "message": "Invoicing started in background. Check /admin/invoicing/status for progress.",
+        "timestamp": datetime.now(COT).isoformat(),
+    }
 
 
 # ============================================================================
