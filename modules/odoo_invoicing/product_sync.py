@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Tenants whose products are already in warehouse (storable)
 STORABLE_BRANDS = {"Dios Mio Coffee", "GAVI", "Hacienda Venecia", "1830 Coffee"}
 
-# ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Embedded Product Data (from Bloomspal Data.xlsx) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+# ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Embedded Product Data (from Bloomspal Data.xlsx) ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
 
 PRODUCTS = [
     {"sku": "DMC12BDGS", "name": "Dark roast Ground coffee 12 oz", "description": "Ground coffee", "declared_value": 3.36, "cost": 13.0, "gross_weight": 0.358, "net_weight": 0.34, "hs_code": "Duty Free - 09012100", "brand": "Dios Mio Coffee", "category": "Bolsa 340gr", "bill_category": "Roasted Coffe - 340 Gr Bolsa Ground", "product_type": "SINGLE"},
@@ -312,7 +312,7 @@ def sync_products_to_odoo(
 
             # Build product values
             product_vals = {
-                "name": p["name"],
+                "name": f"[{p['brand']}] {p['name']}",
                 "default_code": p["sku"],
                 "type": odoo_type,
                 "sale_ok": True,
