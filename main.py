@@ -756,9 +756,11 @@ async def confirm_warehouse(token: str):
                 )
             """)
 
-            dispatch_date = date.today()
+            dispatch_date_fallback = date.today()
 
             for brand, data in preview.items():
+                # Use date from packing list if available
+                dispatch_date = data.get("dispatch_date") or dispatch_date_fallback
                 brand_result = results.get(brand, {})
                 if brand_result.get("status") != "created":
                     continue
