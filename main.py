@@ -707,6 +707,7 @@ async def confirm_warehouse(token: str):
                 order = creator.create_sale_order(
                     partner_id=data["partner_id"],
                     order_lines=data["order_lines"],
+                    dispatch_date=data.get("dispatch_date"),
                 )
                 results[brand] = {
                     "status": "created",
