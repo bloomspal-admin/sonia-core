@@ -535,7 +535,38 @@ async def get_status():
 # WAREHOUSE PROCESSING â In-memory preview store
 # ============================================================================
 
-_warehouse_previews: Dict[str, dict] = {}  # token â preview data
+_warehouse_previews: Dict[str, dict] = {}
+
+
+def _check_duplicate_awbs(all_awbs: list) -> dict:
+    """Check if any AWBs already exist in warehouse_billing."""
+    if not all_awbs:
+        return {"has_duplicates": False, "duplicates": []}
+    try:
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return {"has_duplicates": False, "duplicates": []}
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        # Unnest JSONB arrays and check intersection
+        cur.execute("""
+            SELECT DISTINCT
+                elem AS awb,
+                brand_name,
+                dispatch_date::text,
+                source_filename
+            FROM warehouse_billing,
+                 jsonb_array_elements_text(tracking_numbers) AS elem
+            WHERE elem = ANY(%s)
+        """, (all_awbs,))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        dupes = [{"awb": r[0], "brand_name": r[1], "dispatch_date": r[2], "source_filename": r[3]} for r in rows]
+        return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
+    except Exception as e:
+        logger.warning(f"Could not check duplicate AWBs: {e}")
+        return {"has_duplicates": False, "duplicates": []}  # token â preview data
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
@@ -589,6 +620,14 @@ async def process_warehouse(file: UploadFile = File(...)):
         processor = WarehouseProcessor(sku_map=sku_map)
         preview = processor.process(parsed)
 
+        # --- Duplicate AWB check ---
+        all_awbs = []
+        for brand, bdata in preview.items():
+            awbs = bdata.get("tracking_numbers", [])
+            if awbs:
+                all_awbs.extend(awbs)
+        duplicate_result = _check_duplicate_awbs(all_awbs)
+
         # Generate token and store preview
         token = str(uuid.uuid4())
         _warehouse_previews[token] = {
@@ -625,6 +664,8 @@ async def process_warehouse(file: UploadFile = File(...)):
             "filename": file.filename,
             "token": token,
             "brands": summary,
+            "has_duplicates": duplicate_result["has_duplicates"],
+            "duplicates": duplicate_result["duplicates"],
         }
 
     except ValueError as e:
@@ -870,7 +911,13 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 <h2 style="margin-bottom:4px;">Preview</h2>
                 <p class="subtitle" id="previewFilename"></p>
                 <div id="previewContent"></div>
-                <div class="actions">
+                <div id="duplicateWarning" style="display:none; background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:16px; margin-bottom:16px;">
+                        <h3 style="color:#856404; margin:0 0 8px 0;">&#9888; AWBs Duplicados Detectados</h3>
+                        <p style="color:#856404; margin:0 0 8px 0;">Las siguientes guias ya fueron procesadas anteriormente:</p>
+                        <div id="duplicateList" style="max-height:200px; overflow-y:auto;"></div>
+                        <p style="color:#856404; margin:8px 0 0 0; font-size:0.9em;">Puedes continuar si deseas reprocesar, pero los datos se duplicaran en el billing.</p>
+                    </div>
+                    <div class="actions">
                     <button class="btn btn-primary" id="confirmBtn" onclick="confirmOrders()">
                         Crear Ordenes en Odoo
                     </button>
@@ -984,7 +1031,23 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
             }
 
             document.getElementById('previewContent').innerHTML = html;
-        }
+        
+                // --- Duplicate AWB warning ---
+                const dupWarning = document.getElementById('duplicateWarning');
+                const dupList = document.getElementById('duplicateList');
+                if (data.has_duplicates && data.duplicates && data.duplicates.length > 0) {
+                    let dupHtml = '<table style="width:100%; font-size:0.85em; border-collapse:collapse;">';
+                    dupHtml += '<tr style="background:#ffc107;color:#856404;"><th style="padding:4px 8px;">AWB</th><th style="padding:4px 8px;">Marca</th><th style="padding:4px 8px;">Fecha</th><th style="padding:4px 8px;">Archivo</th></tr>';
+                    data.duplicates.forEach(d => {
+                        dupHtml += '<tr style="border-bottom:1px solid #ffeeba;"><td style="padding:4px 8px;">' + d.awb + '</td><td style="padding:4px 8px;">' + d.brand_name + '</td><td style="padding:4px 8px;">' + (d.dispatch_date || '-') + '</td><td style="padding:4px 8px;">' + (d.source_filename || '-') + '</td></tr>';
+                    });
+                    dupHtml += '</table>';
+                    dupList.innerHTML = dupHtml;
+                    dupWarning.style.display = 'block';
+                } else {
+                    dupWarning.style.display = 'none';
+                }
+}
 
         function metric(value, label) {
             return '<div class="metric"><div class="metric-value">' + value + '</div><div class="metric-label">' + label + '</div></div>';
