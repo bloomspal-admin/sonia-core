@@ -657,6 +657,7 @@ async def process_warehouse(file: UploadFile = File(...)):
                 "total_logistics": data["total_logistics"],
                 "total_skus_sold": data["total_skus_sold"],
                 "unmapped_skus": data["unmapped_skus"],
+                "dispatch_date": str(data.get("dispatch_date", "")) if data.get("dispatch_date") else None,
             }
 
         return {
@@ -991,14 +992,28 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 hide('loadingSection');
                 show('previewSection');
             } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
                 hide('loadingSection');
                 show('uploadSection');
-                alert('Error: ' + err.message);
             }
         }
 
         function renderPreview(data) {
             document.getElementById('previewFilename').textContent = data.filename;
+            // Show dispatch date from first brand
+            let dispatchDateStr = '';
+            if (data.brands) {
+                for (const b in data.brands) {
+                    if (data.brands[b].dispatch_date) {
+                        dispatchDateStr = data.brands[b].dispatch_date;
+                        break;
+                    }
+                }
+            }
+            if (dispatchDateStr) {
+                document.getElementById('previewFilename').textContent = data.filename + '  |  Fecha de corte: ' + dispatchDateStr;
+            }
             let html = '';
 
             for (const [brand, info] of Object.entries(data.brands)) {
