@@ -1,8 +1,8 @@
 """
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                    SonIA Core — Daily Tracking Orchestrator                    ║
-║                              BloomsPal                                        ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â                    SonIA Core â Daily Tracking Orchestrator                    â
+â                              BloomsPal                                        â
+âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 Automated daily flow:
 1. Read tracking numbers from DynamoDB (READ ONLY)
@@ -31,6 +31,9 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, HTMLResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+import psycopg2
+from psycopg2.extras import Json
 
 import config
 from modules.dynamo_reader import DynamoReader
@@ -87,7 +90,7 @@ def run_daily_flow(manual: bool = False):
     unmapped_tenants = set()
 
     try:
-        # ── Initialize Database ──
+        # ââ Initialize Database ââ
         db = DBManager(config.DATABASE_URL)
         db.connect()
         run_id = db.start_run(run_date=date.today())
@@ -106,7 +109,7 @@ def run_daily_flow(manual: bool = False):
         }
         errors = []
 
-        # ── STEP 1: Read from DynamoDB ──
+        # ââ STEP 1: Read from DynamoDB ââ
         logger.info("STEP 1: Reading from DynamoDB...")
         try:
             dynamo = DynamoReader(
@@ -127,7 +130,7 @@ def run_daily_flow(manual: bool = False):
             _send_failure_alert(f"Error leyendo DynamoDB: {e}")
             return
 
-        # ── STEP 2: Sync tracking numbers to PostgreSQL ──
+        # ââ STEP 2: Sync tracking numbers to PostgreSQL ââ
         logger.info("STEP 2: Syncing to PostgreSQL...")
         tenant_mapping = db.get_tenant_mapping()
         new_count = 0
@@ -170,7 +173,7 @@ def run_daily_flow(manual: bool = False):
         # Alert admin about unmapped tenants
         if unmapped_tenants:
             unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
-            alert_msg = f"⚠️ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            alert_msg = f"â ï¸ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
             if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
                 try:
                     whatsapp = WhatsAppSender(
@@ -182,7 +185,7 @@ def run_daily_flow(manual: bool = False):
                 except Exception as e:
                     logger.error(f"Failed to send unmapped tenants alert: {e}")
 
-        # ── STEP 3: Query FedEx for undelivered shipments ──
+        # ââ STEP 3: Query FedEx for undelivered shipments ââ
         logger.info("STEP 3: Querying FedEx API...")
         undelivered = db.get_undelivered_shipments()
         logger.info(f"Found {len(undelivered)} undelivered shipments to check")
@@ -279,7 +282,7 @@ def run_daily_flow(manual: bool = False):
                 logger.error(f"STEP 3 ERROR: {e}")
                 errors.append({"step": "fedex_check", "error": str(e)})
 
-        # ── STEP 4: Detect anomalies (Part C) ──
+        # ââ STEP 4: Detect anomalies (Part C) ââ
         logger.info("STEP 4: Detecting anomalies...")
         try:
             detector = AnomalyDetector(thresholds={
@@ -321,7 +324,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 4 ERROR: {e}")
             errors.append({"step": "anomaly_detection", "error": str(e)})
 
-        # ── STEP 5: Query Odoo and send reports ──
+        # ââ STEP 5: Query Odoo and send reports ââ
         logger.info("STEP 5: Querying Odoo and sending reports...")
         try:
             odoo = OdooClient(
@@ -389,7 +392,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 5 ERROR: {e}")
             errors.append({"step": "reports_and_whatsapp", "error": str(e)})
 
-        # ── STEP 6: Complete run ──
+        # ââ STEP 6: Complete run ââ
         status = "success" if not errors else "partial"
         db.complete_run(run_id, status, metrics, errors)
 
@@ -405,7 +408,7 @@ def run_daily_flow(manual: bool = False):
         logger.critical(f"CRITICAL ERROR in daily flow: {e}")
         import traceback
         traceback.print_exc()
-        _send_failure_alert(f"Error crítico en flujo diario: {e}")
+        _send_failure_alert(f"Error crÃ­tico en flujo diario: {e}")
         if db and run_id:
             try:
                 db.complete_run(run_id, "failed", {}, [{"step": "critical", "error": str(e)}])
@@ -457,7 +460,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SonIA Core — BloomsPal",
+    title="SonIA Core â BloomsPal",
     description="Daily tracking orchestrator",
     lifespan=lifespan,
 )
@@ -529,17 +532,17 @@ async def get_status():
 
 
 # ============================================================================
-# WAREHOUSE PROCESSING — In-memory preview store
+# WAREHOUSE PROCESSING â In-memory preview store
 # ============================================================================
 
-_warehouse_previews: Dict[str, dict] = {}  # token → preview data
+_warehouse_previews: Dict[str, dict] = {}  # token â preview data
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
 
 
 def _load_sku_map() -> dict:
-    """Load SKU→product ID mapping."""
+    """Load SKUâproduct ID mapping."""
     if os.path.exists(_SKU_MAP_PATH):
         with open(_SKU_MAP_PATH, "r") as f:
             return json.load(f)
@@ -561,7 +564,7 @@ async def warehouse_ui():
 async def process_warehouse(file: UploadFile = File(...)):
     """
     Upload a warehouse Excel file, parse it, and return a preview.
-    Does NOT create orders yet — user must confirm.
+    Does NOT create orders yet â user must confirm.
     """
     # Validate file
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
@@ -682,6 +685,86 @@ async def confirm_warehouse(token: str):
                     "error": str(e),
                 }
 
+
+        # ── Save billing data to PostgreSQL ──────────────────────
+        try:
+            billing_conn = psycopg2.connect(config.DATABASE_URL)
+            billing_cur = billing_conn.cursor()
+
+            billing_cur.execute("""
+                CREATE TABLE IF NOT EXISTS warehouse_billing (
+                    id              SERIAL PRIMARY KEY,
+                    dispatch_date   DATE NOT NULL,
+                    brand_code      VARCHAR(20) NOT NULL,
+                    brand_name      VARCHAR(100) NOT NULL,
+                    partner_id      INTEGER NOT NULL,
+                    tenant_id       INTEGER,
+                    odoo_order_id   INTEGER,
+                    odoo_order_name VARCHAR(50),
+                    unique_orders   INTEGER NOT NULL DEFAULT 0,
+                    total_boxes     INTEGER NOT NULL DEFAULT 0,
+                    total_weight_kg NUMERIC(10,4) NOT NULL DEFAULT 0,
+                    weight_cost     NUMERIC(10,2) NOT NULL DEFAULT 0,
+                    address_fee     NUMERIC(10,2) NOT NULL DEFAULT 0,
+                    total_cost      NUMERIC(10,2) NOT NULL DEFAULT 0,
+                    product_count   INTEGER NOT NULL DEFAULT 0,
+                    sku_summary     JSONB,
+                    tracking_numbers JSONB,
+                    source_filename VARCHAR(255),
+                    created_at      TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+
+            dispatch_date = date.today()
+
+            for brand, data in preview.items():
+                brand_result = results.get(brand, {})
+                if brand_result.get("status") != "created":
+                    continue
+
+                sku_summary = {}
+                for sku_code, sku_info in data.get("skus", {}).items():
+                    sku_summary[sku_code] = sku_info["qty"]
+
+                billing_cur.execute("""
+                    INSERT INTO warehouse_billing (
+                        dispatch_date, brand_code, brand_name, partner_id,
+                        odoo_order_id, odoo_order_name,
+                        unique_orders, total_boxes, total_weight_kg,
+                        weight_cost, address_fee, total_cost,
+                        product_count, sku_summary, tracking_numbers,
+                        source_filename
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s
+                    )
+                """, (
+                    dispatch_date, brand,
+                    data.get("partner_name", ""),
+                    data.get("partner_id"),
+                    brand_result.get("order_id"),
+                    brand_result.get("order_name"),
+                    data.get("unique_orders", 0),
+                    data.get("total_boxes", 0),
+                    data.get("total_weight_raw", 0),
+                    data.get("freight_cost", 0),
+                    data.get("address_fee", 0),
+                    data.get("total_logistics", 0),
+                    data.get("total_skus_sold", 0),
+                    Json(sku_summary) if sku_summary else None,
+                    Json(data.get("tracking_numbers", [])),
+                    stored.get("filename", ""),
+                ))
+
+            billing_conn.commit()
+            billing_cur.close()
+            billing_conn.close()
+            logger.info(f"Billing data saved for {len(results)} brands")
+
+        except Exception as billing_err:
+            logger.error(f"Failed to save billing data (non-blocking): {billing_err}")
+            # Non-blocking: orders are already created in Odoo
+
         # Remove preview after use
         del _warehouse_previews[token]
 
@@ -707,7 +790,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SonIA — Warehouse Processor</title>
+    <title>SonIA â Warehouse Processor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
@@ -760,7 +843,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>SonIA — Warehouse Processor</h1>
+        <h1>SonIA â Warehouse Processor</h1>
         <p class="subtitle">Sube el archivo Excel del warehouse para crear ordenes de venta en Odoo</p>
 
         <!-- Upload Section -->
