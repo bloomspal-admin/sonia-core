@@ -96,6 +96,7 @@ class OdooSaleOrderCreator:
             date_str = str(dispatch_date)
             order_vals["client_order_ref"] = f"Warehouse {date_str}"
             order_vals["note"] = f"Fecha de corte warehouse: {date_str}"
+            order_vals["commitment_date"] = date_str
 
         order_id = self._call("sale.order", "create", [order_vals])
 
