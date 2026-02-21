@@ -89,6 +89,10 @@ class WarehouseParser:
                 skus = self._parse_products_sold_for_brand(brand)
                 brand_data["skus"] = skus
                 brand_data["total_skus_sold"] = sum(skus.values())
+            elif "PICKING LIST" in self.sheet_names:
+                skus = self._parse_picking_list()
+                brand_data["skus"] = skus
+                brand_data["total_skus_sold"] = sum(skus.values())
 
             result[brand] = brand_data
             logger.info(
@@ -222,6 +226,41 @@ class WarehouseParser:
             "tracking_numbers": tracking_numbers,
             "dispatch_date": dispatch_date,
         }
+
+
+    def _parse_picking_list(self) -> Dict[str, int]:
+        """
+        Fallback: parse PICKING LIST tab to extract SKUs when PRODUCTS SOLD is missing.
+
+        Structure:
+            Header row has 'SAP TERC' in col A.
+            Data rows: SAP code in col A, quantity in col D.
+            Ends at row with 'TOTAL' or empty SAP.
+        """
+        ws = self.wb["PICKING LIST"]
+        skus = {}
+        in_data = False
+
+        for row in ws.iter_rows(min_row=1, values_only=True):
+            col_a = str(row[0] or "").strip() if row[0] is not None else ""
+            col_d = row[3] if len(row) > 3 else None
+
+            if not in_data:
+                if "SAP" in col_a.upper():
+                    in_data = True
+                    continue
+            else:
+                if not col_a or "TOTAL" in col_a.upper():
+                    break
+                if col_d is not None:
+                    try:
+                        qty = int(col_d)
+                        skus[col_a] = qty
+                    except (ValueError, TypeError):
+                        continue
+
+        logger.info(f"  Parsed PICKING LIST: {len(skus)} SKUs, total {sum(skus.values())} units")
+        return skus
 
     def _parse_products_sold_for_brand(self, brand: str) -> Dict[str, int]:
         """
