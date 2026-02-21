@@ -55,6 +55,7 @@ class OdooSaleOrderCreator:
         self,
         partner_id: int,
         order_lines: List[Dict[str, Any]],
+        dispatch_date: str = None,
     ) -> Dict[str, Any]:
         """
         Create a draft sale order in Odoo.
@@ -89,6 +90,12 @@ class OdooSaleOrderCreator:
             "order_line": odoo_lines,
             "user_id": 10,  # jeniferparra@bloomspal.com
         }
+
+        # Add dispatch date as client reference and note
+        if dispatch_date:
+            date_str = str(dispatch_date)
+            order_vals["client_order_ref"] = f"Warehouse {date_str}"
+            order_vals["note"] = f"Fecha de corte warehouse: {date_str}"
 
         order_id = self._call("sale.order", "create", [order_vals])
 
