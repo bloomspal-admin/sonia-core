@@ -76,7 +76,7 @@ class OdooSaleOrderCreator:
                 "product_id": line["product_id"],
                 "product_uom_qty": line["product_uom_qty"],
                 "price_unit": line["price_unit"],
-                "tax_id": [(5, 0, 0)],  # Clear all taxes
+                "tax_ids": [(5, 0, 0)],  # Clear all taxes
             }
             if line.get("name"):
                 line_vals["name"] = line["name"]
