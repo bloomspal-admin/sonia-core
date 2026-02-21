@@ -38,7 +38,7 @@ BOX_WEIGHTS: Dict[str, float] = {
 
 DEFAULT_BOX_WEIGHT = 1.0  # kg
 
-# ── Freight pricing ───────────────────────────────────────────────────
+# ── Freight pricing ──────────────────────────────────────────────────
 COST_PER_KG = 6.5    # USD per kg
 ADDRESS_FEE = 8.0     # USD per unique order/address
 
