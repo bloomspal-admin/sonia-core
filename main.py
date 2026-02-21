@@ -914,6 +914,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
             <div class="card">
                 <h2 style="margin-bottom:4px;">Preview</h2>
                 <p class="subtitle" id="previewFilename"></p>
+                <p id="previewFecha" style="color:#2d6a4f; font-weight:bold; margin:4px 0 12px 0; font-size:1.05em; display:none;"></p>
                 <div id="previewContent"></div>
                 <div id="duplicateWarning" style="display:none; background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:16px; margin-bottom:16px;">
                         <h3 style="color:#856404; margin:0 0 8px 0;">&#9888; AWBs Duplicados Detectados</h3>
@@ -1001,18 +1002,21 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 
         function renderPreview(data) {
             document.getElementById('previewFilename').textContent = data.filename;
-            // Show dispatch date from first brand
-            let dispatchDateStr = '';
+            // Show dispatch date in dedicated element
+            var fechaEl = document.getElementById('previewFecha');
+            var fechaFound = '';
             if (data.brands) {
-                for (const b in data.brands) {
-                    if (data.brands[b].dispatch_date) {
-                        dispatchDateStr = data.brands[b].dispatch_date;
-                        break;
-                    }
+                var brandKeys = Object.keys(data.brands);
+                for (var i = 0; i < brandKeys.length; i++) {
+                    var bd = data.brands[brandKeys[i]];
+                    if (bd.dispatch_date) { fechaFound = bd.dispatch_date; break; }
                 }
             }
-            if (dispatchDateStr) {
-                document.getElementById('previewFilename').textContent = data.filename + '  |  Fecha de corte: ' + dispatchDateStr;
+            if (fechaFound && fechaEl) {
+                fechaEl.textContent = 'Fecha de corte: ' + fechaFound;
+                fechaEl.style.display = 'block';
+            } else if (fechaEl) {
+                fechaEl.style.display = 'none';
             }
             let html = '';
 
