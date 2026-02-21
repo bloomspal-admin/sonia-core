@@ -72,6 +72,7 @@ class WarehouseParser:
                 "skus": {},
                 "total_skus_sold": 0,
                 "tracking_numbers": [],
+                "dispatch_date": None,
             }
 
             # 2. Parse the PACK LIST for this brand (orders, boxes, AWBs)
@@ -81,6 +82,7 @@ class WarehouseParser:
                 brand_data["boxes"] = pack_data["boxes"]
                 brand_data["total_boxes"] = sum(pack_data["boxes"].values())
                 brand_data["tracking_numbers"] = pack_data["tracking_numbers"]
+                brand_data["dispatch_date"] = pack_data.get("dispatch_date")
 
             # 3. Parse PRODUCTS SOLD for this brand (SKUs)
             if "PRODUCTS SOLD" in self.sheet_names:
@@ -128,6 +130,29 @@ class WarehouseParser:
 
         # Find the header row
         header_row = None
+        dispatch_date = None
+        # Extract FECHA CREACION from row 4
+        for r in ws.iter_rows(min_row=1, max_row=8, values_only=True):
+            vals = [str(v or "").strip() for v in r]
+            if vals and "FECHA" in vals[0].upper() and "CREACI" in vals[0].upper():
+                raw_date = vals[1] if len(vals) > 1 else ""
+                if raw_date:
+                    try:
+                        # Parse "19 Feb 2026" format
+                        from datetime import datetime as _dt
+                        # Try multiple locale formats
+                        for fmt in ("%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y"):
+                            try:
+                                dispatch_date = _dt.strptime(raw_date, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                        if dispatch_date is None:
+                            logger.warning(f"Could not parse date: {raw_date}")
+                    except Exception as e:
+                        logger.warning(f"Error parsing date from {sheet_name}: {e}")
+                break
+
         for i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=False), 1):
             vals = [c.value for c in row]
             if vals and str(vals[0] or "").strip().upper() == "ORDEN #":
@@ -187,6 +212,7 @@ class WarehouseParser:
             "unique_orders": len(orders),
             "boxes": boxes,
             "tracking_numbers": tracking_numbers,
+            "dispatch_date": dispatch_date,
         }
 
     def _parse_products_sold_for_brand(self, brand: str) -> Dict[str, int]:
