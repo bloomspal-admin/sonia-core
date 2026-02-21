@@ -170,7 +170,7 @@ def run_daily_flow(manual: bool = False):
         # Alert admin about unmapped tenants
         if unmapped_tenants:
             unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
-            alert_msg = f*₠️ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            alert_msg = f"⚠️ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
             if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
                 try:
                     whatsapp = WhatsAppSender(
@@ -322,7 +322,7 @@ def run_daily_flow(manual: bool = False):
             errors.append({"step": "anomaly_detection", "error": str(e)})
 
         # ── STEP 5: Query Odoo and send reports ──
-        logger.info("STEP�5: Querying Odoo and sending reports...")
+        logger.info("STEP 5: Querying Odoo and sending reports...")
         try:
             odoo = OdooClient(
                 url=config.ODOO_URL,
@@ -497,12 +497,12 @@ async def trigger_manual_run(api_key: str = ""):
 
 @app.get("/api/status")
 async def get_status():
-   """Get the status of the last run."""
+    """Get the status of the last run."""
     try:
-        db = DBManager(config.DATACASE_URL)
+        db = DBManager(config.DATABASE_URL)
         db.connect()
         # Get last run log from daily_run_logs table
-        cursor = db.conn.cursor( )
+        cursor = db.conn.cursor()
         cursor.execute(
             "SELECT id, run_date, started_at, completed_at, "
             "total_shipments_read, new_shipments, shipments_checked, "
@@ -553,7 +553,7 @@ def _load_sku_map() -> dict:
 
 @app.get("/warehouse", response_class=HTMLResponse)
 async def warehouse_ui():
-   """Serve the warehouse processing UI."""
+    """Serve the warehouse processing UI."""
     return WAREHOUSE_HTML
 
 
@@ -584,7 +584,7 @@ async def process_warehouse(file: UploadFile = File(...)):
         # Process
         sku_map = _load_sku_map()
         processor = WarehouseProcessor(sku_map=sku_map)
-        preview = processor.proceess(parsed)
+        preview = processor.process(parsed)
 
         # Generate token and store preview
         token = str(uuid.uuid4())
