@@ -131,24 +131,32 @@ class WarehouseParser:
         # Find the header row
         header_row = None
         dispatch_date = None
-        # Extract FECHA CREACION from row 4
+        # Extract FECHA CREACION from header rows
         for r in ws.iter_rows(min_row=1, max_row=8, values_only=True):
-            vals = [str(v or "").strip() for v in r]
-            if vals and "FECHA" in vals[0].upper() and "CREACI" in vals[0].upper():
-                raw_date = vals[1] if len(vals) > 1 else ""
-                if raw_date:
+            str_vals = [str(v or "").strip() for v in r]
+            if str_vals and "FECHA" in str_vals[0].upper() and "CREACI" in str_vals[0].upper():
+                raw_val = r[1] if len(r) > 1 else None
+                logger.info(f"Found FECHA row in {sheet_name}, raw value: {raw_val} (type: {type(raw_val).__name__})")
+                if raw_val is not None:
                     try:
-                        # Parse "19 Feb 2026" format
-                        from datetime import datetime as _dt
-                        # Try multiple locale formats
-                        for fmt in ("%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y"):
-                            try:
-                                dispatch_date = _dt.strptime(raw_date, fmt).date()
-                                break
-                            except ValueError:
-                                continue
+                        from datetime import datetime as _dt, date as _date
+                        # Handle Excel datetime objects directly
+                        if isinstance(raw_val, _dt):
+                            dispatch_date = raw_val.date()
+                        elif isinstance(raw_val, _date):
+                            dispatch_date = raw_val
+                        else:
+                            raw_date = str(raw_val).strip()
+                            for fmt in ("%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
+                                try:
+                                    dispatch_date = _dt.strptime(raw_date, fmt).date()
+                                    break
+                                except ValueError:
+                                    continue
                         if dispatch_date is None:
-                            logger.warning(f"Could not parse date: {raw_date}")
+                            logger.warning(f"Could not parse date from: {raw_val} (type: {type(raw_val).__name__})")
+                        else:
+                            logger.info(f"Extracted dispatch_date: {dispatch_date} from {sheet_name}")
                     except Exception as e:
                         logger.warning(f"Error parsing date from {sheet_name}: {e}")
                 break
