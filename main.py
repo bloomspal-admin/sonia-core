@@ -170,7 +170,7 @@ def run_daily_flow(manual: bool = False):
         # Alert admin about unmapped tenants
         if unmapped_tenants:
             unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
-            alert_msg = f"‚ö†Ô∏è *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            alert_msg = f*‚Ç†Ô∏è *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
             if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
                 try:
                     whatsapp = WhatsAppSender(
@@ -208,7 +208,7 @@ def run_daily_flow(manual: bool = False):
                     batch = undelivered[i:i + batch_size]
                     tracking_numbers = [s["tracking_number"] for s in batch]
 
-                    results = fedex.track_batch(tracking_unumbers)
+                    results = fedex.track_batch(tracking_numbers)
 
                     for tn, result in results.items():
                         if result and not result.get("error"):
@@ -265,10 +265,10 @@ def run_daily_flow(manual: bool = False):
                                 if sonia_status == "delivered":
                                     delivered_count += 1
 
-                      # Respect rate limits
+                    # Respect rate limits
                     import time
                     if i + batch_size < len(undelivered):
-                        time.sleep(config.FEDEX_BATCHA~DELAY)
+                        time.sleep(config.FEDEX_BATCH_DELAY)
 
                 metrics["shipments_checked"] = len(undelivered)
                 metrics["shipments_updated"] = updated_count
@@ -278,34 +278,269 @@ def run_daily_flow(manual: bool = False):
             except Exception as e:
                 logger.error(f"STEP 3 ERROR: {e}")
                 errors.append({"step": "fedex_check", "error": str(e)})
-€Y[ù⁄YH€Y[ù⁄[ôõÀôŸ]
-öYäBà€Y[ù€ò[YHH€Y[ù⁄[ôõÀôŸ]
-õò[YHãàï[ò[ù^›[ò[ù⁄YHäBàŸ€◊ÿ€€\[ûW⁄YH€Y[ù⁄[ôõÀôŸ]
-õŸ€◊ÿ€€\[ûW⁄YäBÇà»Ÿ]⁄\Y[ù»õ‹à\»€Y[ùàYà€Y[ù⁄YÇà⁄\Y[ù»HãôŸ]ÿ[‹⁄\Y[ù◊Ÿõ‹ó‹ô\‹ù
-€Y[ù⁄Y
-BÇàYàõ›⁄\Y[ùŒÇà€€ù[ùYBÇà»Ÿ[ô\ò]Hô\‹ùàô\‹ù›^Hô\‹ùŸŸ[ãôŸ[ô\ò]Wÿ€Y[ù‹ô\‹ù
-€Y[ù€ò[YK⁄\Y[ù BàY]öX‹÷»úô\‹ù◊ŸŸ[ô\ò]YóH
-œHBÇà»Ÿ]€€ùX›»úõ€HŸ€»YàŸH]ôHŸ€◊ÿ€€\[ûW⁄YàYàŸ€◊ÿ€€\[ûW⁄YÇàûNÇà€€ùX›»HŸ€ÀôŸ]ÿ€€ùX›◊Ÿõ‹óÿ€€\[ûJŸ€◊ÿ€€\[ûW⁄Y
-BÇàõ‹à€€ùX›[à€€ùX›ŒÇà€ôHH€€ùX›ôŸ]
-ù⁄]ÿ\äBàYà€ôNÇà›XÿŸ\‹»H⁄]ÿ\úŸ[ô‹ô\‹ù‹ﬁ[ò €ôKô\‹ù›^€Y[ù€ò[YJBàYà›XÿŸ\‹ŒÇàY]öX‹÷»úô\‹ù◊‹Ÿ[ùóH
-œHBà^Ÿ\^Ÿ\[€à\»NÇàŸŸŸ\ãô\úõ‹äàë\úõ‹àŸ][ô»Ÿ€»€€ùX›»õ‹à€€\[ûH€Ÿ€◊ÿ€€\[ûW⁄YNàŸ_HäBà\úõ‹úÀò\[ô
-»ú›\éàõŸ€◊ÿ€€ùX›»ãô\úõ‹àéà›äJ_JBÇà»8• 8• ’TéàŸ[ô[\ù»8• 8• àŸŸŸ\ãö[ôõ î’TéàŸ[ô[ô»YZ[à[\ùÀããàäBàYà\úõ‹úŒÇà[\ù›»Hã∏¶®;Ó#»
-ëêS‘»SàëT‘ïHPTíS à8•dx•dx•dx•dx•dWóàÇàõ‹à\úõ‹à[à\úõ‹úŒÇà[\ù›»
-œHàà<'e : "{error['paste']} - {error['error']}\n"
-            alert_ts += f"\nL‚îÅgistroÈôÑReport:\nI d ::% correct agode
-            if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
-                try:
-                    whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert_ts)
-                    metrics["alerts_sent"] += 1
-                except Exception as e:
-                    logger.error(f"Failed to send error alert: {e}")
 
-        # ‚îÄ‚îÄ FINAL: Complete run ‚îÄ‚îÄB         end_time = datetime.now(COT)
-        duration = end_time - start_time
+        # ‚îÄ‚îÄ STEP 4: Detect anomalies (Part C) ‚îÄ‚îÄ
+        logger.info("STEP 4: Detecting anomalies...")
+        try:
+            detector = AnomalyDetector(thresholds={
+                "transit_days": config.THRESHOLD_TRANSIT_DAYS,
+                "customs_days": config.THRESHOLD_CUSTOMS_DAYS,
+                "delivery_attempt_days": config.THRESHOLD_DELIVERY_ATTEMPT_DAYS,
+                "label_no_movement_days": config.THRESHOLD_LABEL_NO_MOVEMENT_DAYS,
+            })
+
+            # Get all undelivered shipments with updated status
+            all_undelivered = db.get_undelivered_shipments()
+            anomalies = detector.check_all_shipments(all_undelivered)
+
+            claims_created = 0
+            for anomaly in anomalies:
+                tn = anomaly["tracking_number"]
+                rule = anomaly["rule"]
+
+                # Check if claim already exists for this tracking+rule
+                if not db.claim_exists_for_tracking(tn, rule):
+                    claim_data = {
+                        "tracking_number": tn,
+                        "client_id": anomaly.get("client_id"),
+                        "client_name": anomaly.get("client_name", ""),
+                        "claim_type": anomaly.get("claim_type", "otro"),
+                        "description": anomaly.get("description", ""),
+                        "origin": "proactivo_tracker",
+                        "created_automatically": True,
+                        "auto_detection_rule": rule,
+                    }
+                    db.create_claim(claim_data)
+                    claims_created += 1
+                    logger.info(f"Auto-claim created: {tn} ({rule})")
+
+            metrics["claims_created"] = claims_created
+            logger.info(f"Anomaly detection complete: {claims_created} new claims created")
+
+        except Exception as e:
+            logger.error(f"STEP 4 ERROR: {e}")
+            errors.append({"step": "anomaly_detection", "error": str(e)})
+
+        # ‚îÄ‚îÄ STEP 5: Query Odoo and send reports ‚îÄ‚îÄ
+        logger.info("STEP5: Querying Odoo and sending reports...")
+        try:
+            odoo = OdooClient(
+                url=config.ODOO_URL,
+                db=config.ODOO_DB,
+                username=config.ODOO_USERNAME,
+                password=config.ODOO_PASSWORD,
+            )
+
+            whatsapp = WhatsAppSender(
+                agent_url=config.SONIA_AGENT_URL,
+                api_key=config.SONIA_AGENT_API_KEY,
+            )
+
+            report_gen = ReportGenerator()
+
+            if odoo.authenticate():
+                # Process each client/tenant
+                for tenant_id, client_info in tenant_mapping.items():
+                    client_id = client_info.get("id")
+                    client_name = client_info.get("name", f"Tenant-{tenant_id}")
+                    odoo_company_id = client_info.get("odoo_company_id")
+
+                    # Get shipments for this client
+                    if client_id:
+                        shipments = db.get_all_shipments_for_report(client_id)
+
+                        if not shipments:
+                            continue
+
+                        # Generate report
+                        report_text = report_gen.generate_client_report(client_name, shipments)
+                        metrics["reports_generated"] += 1
+
+                        # Get contacts from Odoo if we have odoo_company_id
+                        if odoo_company_id:
+                            try:
+                                contacts = odoo.get_contacts_for_company(odoo_company_id)
+
+                                for contact in contacts:
+                                    phone = contact.get("whatsapp")
+                                    if phone:
+                                        success = whatsapp.send_report_sync(phone, report_text, client_name)
+                                        if success:
+                                            metrics["reports_sent"] += 1
+                            except Exception as e:
+                                logger.error(f"Error getting Odoo contacts for company {odoo_company_id}: {e}")
+                                errors.append({"step": "odoo_contacts", "error": str(e)})
+                        else:
+                            # Client not in Odoo - alert admin
+                            active_count = len([s for s in shipments if not s.get("is_delivered")])
+                            alert = report_gen.generate_admin_inconsistency_alert(
+                                client_name, tenant_id, active_count
+                            )
+                            if config.ADMIN_WHATSAPP:
+                                whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert)
+                                metrics["alerts_sent"] += 1
+
+                logger.info(f"Reports: {metrics['reports_generated']} generated, {metrics['reports_sent']} sent")
+            else:
+                logger.error("Failed to authenticate with Odoo")
+                errors.append({"step": "odoo_auth", "error": "Authentication failed"})
+
+        except Exception as e:
+            logger.error(f"STEP 5 ERROR: {e}")
+            errors.append({"step": "reports_and_whatsapp", "error": str(e)})
+
+        # ‚îÄ‚îÄ STEP 6: Complete run ‚îÄ‚îÄ
+        status = "success" if not errors else "partial"
+        db.complete_run(run_id, status, metrics, errors)
+
+        elapsed = (datetime.now(COT) - start_time).total_seconds()
         logger.info(f"{'='*60}")
-        logger.info(f"DAILY FLOW COMPLETED: {end_time.strftime('%Y-%m-%d %H:%M:%S')} COT")
-        logger.info(f"Duration: {duration}")
-        logger.info(f"{"safety_chSKU_MAP_PATH):
+        logger.info(f"DAILY FLOW COMPLETED ({status}) in {elapsed:.1f}s")
+        logger.info(f"Metrics: {json.dumps({k:v for k,v in metrics.items()}, indent=2)}")
+        if errors:
+            logger.warning(f"Errors: {json.dumps(errors, indent=2)}")
+        logger.info(f"{'='*60}")
+
+    except Exception as e:
+        logger.critical(f"CRITICAL ERROR in daily flow: {e}")
+        import traceback
+        traceback.print_exc()
+        _send_failure_alert(f"Error cr√≠tico en flujo diario: {e}")
+        if db and run_id:
+            try:
+                db.complete_run(run_id, "failed", {}, [{"step": "critical", "error": str(e)}])
+            except:
+                pass
+    finally:
+        if fedex:
+            fedex.close()
+        if db:
+            db.close()
+
+
+def _send_failure_alert(message: str):
+    """Send failure alert to admin via WhatsApp."""
+    try:
+        if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
+            whatsapp = WhatsAppSender(
+                agent_url=config.SONIA_AGENT_URL,
+                api_key=config.SONIA_AGENT_API_KEY,
+            )
+            whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, message)
+    except Exception as e:
+        logger.error(f"Failed to send failure alert: {e}")
+
+
+# ============================================================================
+# FASTAPI APP
+# ============================================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events."""
+    # Startup: start scheduler
+    scheduler.add_job(
+        run_daily_flow,
+        CronTrigger(hour=config.CRON_HOUR, minute=config.CRON_MINUTE),
+        id="daily_flow",
+        name="SonIA Daily Tracking Flow",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info(f"Scheduler started. Next run at {config.CRON_HOUR}:{config.CRON_MINUTE:02d} COT")
+
+    yield
+
+    # Shutdown
+    scheduler.shutdown()
+    logger.info("Scheduler shut down")
+
+
+app = FastAPI(
+    title="SonIA Core ‚Äî BloomsPal",
+    description="Daily tracking orchestrator",
+    lifespan=lifespan,
+)
+
+
+@app.get("/")
+async def health():
+    """Health check endpoint."""
+    now = datetime.now(COT)
+    jobs = scheduler.get_jobs()
+    next_run = jobs[0].next_run_time if jobs else None
+
+    return {
+        "status": "ok",
+        "service": "sonia-core",
+        "time": now.isoformat(),
+        "scheduler": {
+            "running": scheduler.running,
+            "next_run": next_run.isoformat() if next_run else None,
+            "jobs": len(jobs),
+        },
+    }
+
+
+@app.post("/api/trigger")
+async def trigger_manual_run(api_key: str = ""):
+    """Manually trigger the daily flow (for testing)."""
+    if api_key != config.SONIA_AGENT_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    import threading
+    thread = threading.Thread(target=run_daily_flow, kwargs={"manual": True})
+    thread.start()
+
+    return {"status": "started", "message": "Daily flow triggered manually"}
+
+
+@app.get("/api/status")
+async def get_status():
+   """Get the status of the last run."""
+    try:
+        db = DBManager(config.DATACASE_URL)
+        db.connect()
+        # Get last run log from daily_run_logs table
+        cursor = db.conn.cursor( )
+        cursor.execute(
+            "SELECT id, run_date, started_at, completed_at, "
+            "total_shipments_read, new_shipments, shipments_checked, "
+            "shipments_updated, shipments_delivered, claims_created, "
+            "reports_generated, reports_sent, alerts_sent, status, errors "
+            "FROM daily_run_logs ORDER BY started_at DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        db.close()
+
+        if row:
+            columns = [desc[0] for desc in cursor.description]
+            result = dict(zip(columns, row))
+            # Parse JSON errors if present
+            if result.get("errors"):
+                try:
+                    result["errors"] = json.loads(result["errors"])
+                except:
+                    pass
+            return result
+        return {"message": "No runs yet"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ============================================================================
+# WAREHOUSE PROCESSING ‚Äî In-memory preview store
+# ============================================================================
+
+_warehouse_previews: Dict[str, dict] = {}  # token ‚Üí preview data
+
+# Path to SKU map (bundled in repo or loaded at startup)
+_SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
+
+
+def _load_sku_map() -> dict:
+    """Load SKU‚Üíproduct ID mapping."""
+    if os.path.exists(_SKU_MAP_PATH):
         with open(_SKU_MAP_PATH, "r") as f:
             return json.load(f)
     logger.warning(f"SKU map not found at {_SKU_MAP_PATH}")
@@ -318,7 +553,7 @@ BÇàõ‹à€€ùX›[à€€ùX›ŒÇà
 
 @app.get("/warehouse", response_class=HTMLResponse)
 async def warehouse_ui():
-    """Serve the warehouse processing UI."""
+   """Serve the warehouse processing UI."""
     return WAREHOUSE_HTML
 
 
@@ -349,7 +584,7 @@ async def process_warehouse(file: UploadFile = File(...)):
         # Process
         sku_map = _load_sku_map()
         processor = WarehouseProcessor(sku_map=sku_map)
-        preview = processor.process(parsed)
+        preview = processor.proceess(parsed)
 
         # Generate token and store preview
         token = str(uuid.uuid4())
@@ -418,7 +653,84 @@ async def confirm_warehouse(token: str):
             password=config.ODOO_PASSWORD,
         )
 
-        if not        th { background: #f8f9fa; font-weight: 600; color: #555; }
+        if not creator.authenticate():
+            raise HTTPException(500, "Failed to authenticate with Odoo")
+
+        # Create sale orders for each dropshipper
+        results = {}
+        for brand, data in preview.items():
+            try:
+                order = creator.create_sale_order(
+                    partner_id=data["partner_id"],
+                    order_lines=data["order_lines"],
+                )
+                results[brand] = {
+                    "status": "created",
+                    "partner_name": data["partner_name"],
+                    "order_id": order["order_id"],
+                    "order_name": order["order_name"],
+                    "amount_total": order["amount_total"],
+                    "state": order["state"],
+                    "url": f"{config.ODOO_URL}/odoo/sales/{order['order_id']}",
+                }
+                logger.info(f"Created order {order['order_name']} for {brand}")
+            except Exception as e:
+                logger.error(f"Failed to create order for {brand}: {e}")
+                results[brand] = {
+                    "status": "error",
+                    "partner_name": data["partner_name"],
+                    "error": str(e),
+                }
+
+        # Remove preview after use
+        del _warehouse_previews[token]
+
+        return {
+            "status": "completed",
+            "filename": stored["filename"],
+            "orders": results,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating orders: {e}")
+        raise HTTPException(500, f"Error creating orders: {e}")
+
+
+# ============================================================================
+# WAREHOUSE HTML UI
+# ============================================================================
+
+WAREHOUSE_HTML = """<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonIA ‚Äî Warehouse Processor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+        h1 { color: #1a1a2e; margin-bottom: 8px; font-size: 24px; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
+        .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .upload-zone { border: 2px dashed #ccc; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; background: #fafafa; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #4a90d9; background: #f0f7ff; }
+        .upload-zone input { display: none; }
+        .upload-zone p { color: #666; margin-top: 8px; }
+        .upload-zone .icon { font-size: 48px; color: #4a90d9; }
+        .btn { display: inline-block; padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: #4a90d9; color: white; }
+        .btn-primary:hover { background: #357abd; }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-secondary:hover { background: #7f8c8d; }
+        table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+        th { background: #f8f9fa; font-weight: 600; color: #555; }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
