@@ -1,1504 +1,100 @@
 """
-SonIA Core - Daily Tracking Orchestrator
-BloomsPal / Fase 1
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    SonIA Core — Daily Tracking Orchestrator                    ║
+║                              BloomsPal                                        ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 
-Runs daily at 4:00 AM COT (UTC-5):
-1. Read shipments from DynamoDB
-2. Group by tenant, look up each in tenant_mapping (PostgreSQL)
-3. Query FedEx Track API for status updates
-4. Store/update in PostgreSQL
-5. Detect anomalies and create proactive claims
-6. Generate per-client reports
-7. Send reports via WhatsApp (through SonIA Agent)
+Automated daily flow:
+1. Read tracking numbers from DynamoDB (READ ONLY)
+2. Check FedEx API for undelivered shipments
+3. Store/update results in PostgreSQL
+4. Detect anomalies and create proactive claims
+5. Query Odoo for client contacts
+6. Send reports via WhatsApp through SonIA Agent
+7. Alert admin on inconsistencies
 
-Error handling: ALL errors are notified to admin via WhatsApp
+Schedule: Daily at 4:00 AM COT (UTC-5)
 """
-import os
-import logging
-import traceback
-import psycopg2
-from datetime import datetime, timezone, timedelta
-from contextlib import asynccontextmanager
-from typing import Dict, List, Any, Optional
-from collections import defaultdict
 
-from fastapi import FastAPI, HTTPException
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import logging
+import sys
+import json
+import os
+import uuid
+import hashlib
+import tempfile
+from datetime import datetime, timezone, timedelta, date
+from contextlib import asynccontextmanager
+from typing import Dict, List
+
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import JSONResponse, HTMLResponse
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+import config
 from modules.dynamo_reader import DynamoReader
-from modules.fedex_tracker import FedExTracker
+from modules.fedex_tracker import FedExTracker, get_sonia_status
 from modules.db_manager import DBManager
-from modules.anomaly_detector import AnomalyDetector
-from modules.report_generator import ReportGenerator
-from modules.whatsapp_sender import WhatsAppSender
 from modules.odoo_client import OdooClient
-from modules.odoo_invoicing import run_daily_invoicing
-from modules.odoo_invoicing.product_sync import sync_products_to_odoo
-from modules.excel_generator import ExcelReportGenerator
-from modules.email_sender import EmailSender
+from modules.whatsapp_sender import WhatsAppSender
+from modules.report_generator import ReportGenerator
+from modules.anomaly_detector import AnomalyDetector
+from modules.warehouse.parser import WarehouseParser
+from modules.warehouse.processor import WarehouseProcessor
+from modules.warehouse.odoo_creator import OdooSaleOrderCreator
 
-# ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Logging ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 logger = logging.getLogger("sonia-core")
 
 COT = timezone(timedelta(hours=-5))
 
-
 # ============================================================================
-# DATABASE MIGRATION
+# SCHEDULER
 # ============================================================================
 
-def run_migration():
-    """Auto-run SQL migrations on startup. Runs each file independently."""
-    db_url = os.getenv("DATABASE_URL", "")
-    if not db_url:
-        logger.warning("No DATABASE_URL - skipping migration")
-        return
-
-    try:
-        conn = psycopg2.connect(db_url)
-        conn.autocommit = True
-        cur = conn.cursor()
-
-        migrations_dir = os.path.join(os.path.dirname(__file__), "migrations")
-        if os.path.isdir(migrations_dir):
-            for fname in sorted(os.listdir(migrations_dir)):
-                if fname.endswith(".sql"):
-                    fpath = os.path.join(migrations_dir, fname)
-                    try:
-                        with open(fpath, "r") as f:
-                            sql = f.read()
-                        cur.execute(sql)
-                        logger.info(f"Migration {fname} applied successfully")
-                    except Exception as me:
-                        logger.warning(f"Migration {fname} note: {me}")
-        else:
-            logger.warning(f"Migrations dir not found: {migrations_dir}")
-
-        cur.close()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Migration error: {e}")
+scheduler = BackgroundScheduler(timezone="America/Bogota")
 
 
 # ============================================================================
-# CONFIGURATION
+# DAILY FLOW ORCHESTRATOR
 # ============================================================================
 
-class Config:
-    DATABASE_URL = os.getenv("DATABASE_URL", "")
-    AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
-    DYNAMO_TABLE = os.getenv("DYNAMO_TABLE_RESERVES", "reserves")
-    FEDEX_API_KEY = os.getenv("FEDEX_API_KEY", "")
-    FEDEX_SECRET_KEY = os.getenv("FEDEX_SECRET_KEY", "")
-    FEDEX_ACCOUNT = os.getenv("FEDEX_ACCOUNT", "")
-    ODOO_URL = os.getenv("ODOO_URL", "")
-    ODOO_DB = os.getenv("ODOO_DB", "")
-    ODOO_USER = os.getenv("ODOO_USER", "")
-    ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "")
-    ODOO_TENANT_FIELD = os.getenv("ODOO_TENANT_FIELD", "x_studio_tenant")
-    ODOO_SPREADSHEET_ID = int(os.getenv("ODOO_SPREADSHEET_ID", "114"))
-    SONIA_AGENT_URL = os.getenv("SONIA_AGENT_URL", "")
-    SONIA_AGENT_API_KEY = os.getenv("SONIA_AGENT_API_KEY", "")
-    ADMIN_WHATSAPP = os.getenv("ADMIN_WHATSAPP", "")
-    RUN_HOUR_COT = int(os.getenv("RUN_HOUR_COT", "4"))
-    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-    # Email (SMTP)
-    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.office365.com")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-    SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "")
-    SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "SonIA - BloomsPal")
-
-
-config = Config()
-
-
-# ============================================================================
-# MODULE INITIALIZATION
-# ============================================================================
-
-def init_modules():
-    """Initialize all modules with config."""
-    mods = {}
-
-    # Database
-    if config.DATABASE_URL:
-        mods["db"] = DBManager(config.DATABASE_URL)
-        logger.info("DBManager initialized")
-    else:
-        logger.warning("DATABASE_URL not set - DB features disabled")
-
-    # DynamoDB Reader
-    if config.AWS_ACCESS_KEY_ID:
-        mods["dynamo"] = DynamoReader(
-            aws_access_key=config.AWS_ACCESS_KEY_ID,
-            aws_secret_key=config.AWS_SECRET_ACCESS_KEY,
-            region=config.AWS_REGION,
-            table_name=config.DYNAMO_TABLE,
-        )
-        logger.info("DynamoReader initialized")
-
-    # FedEx Tracker
-    if config.FEDEX_API_KEY:
-        mods["fedex"] = FedExTracker(
-            client_id=config.FEDEX_API_KEY,
-            client_secret=config.FEDEX_SECRET_KEY,
-            account_number=config.FEDEX_ACCOUNT,
-        )
-        logger.info("FedExTracker initialized")
-
-    # Anomaly Detector
-    mods["anomaly"] = AnomalyDetector()
-    logger.info("AnomalyDetector initialized")
-
-    # Report Generator
-    mods["reports"] = ReportGenerator()
-    logger.info("ReportGenerator initialized")
-
-    # WhatsApp Sender
-    if config.SONIA_AGENT_URL:
-        mods["whatsapp"] = WhatsAppSender(
-            agent_url=config.SONIA_AGENT_URL,
-            api_key=config.SONIA_AGENT_API_KEY,
-        )
-        logger.info("WhatsAppSender initialized")
-
-    # Email Sender (optional - only if SMTP configured)
-    if config.SMTP_USER and config.SMTP_PASSWORD:
-        mods["email"] = EmailSender(
-            smtp_host=config.SMTP_HOST,
-            smtp_port=config.SMTP_PORT,
-            smtp_user=config.SMTP_USER,
-            smtp_password=config.SMTP_PASSWORD,
-            from_email=config.SMTP_FROM_EMAIL or config.SMTP_USER,
-            from_name=config.SMTP_FROM_NAME,
-        )
-        logger.info("EmailSender initialized")
-    else:
-        logger.info("EmailSender not configured (SMTP_USER/SMTP_PASSWORD missing)")
-
-    # Odoo Client
-    if config.ODOO_URL and config.ODOO_USER:
-        mods["odoo"] = OdooClient(
-            url=config.ODOO_URL,
-            db=config.ODOO_DB,
-            username=config.ODOO_USER,
-            password=config.ODOO_PASSWORD,
-        )
-        logger.info("OdooClient initialized")
-
-    # Excel Report Generator
-    mods["excel_gen"] = ExcelReportGenerator()
-    logger.info("ExcelReportGenerator initialized")
-
-    return mods
-
-
-# ============================================================================
-# GLOBAL FLOW PROGRESS STATE
-# ============================================================================
-
-flow_progress = {
-    "running": False,
-    "phase": "",
-    "tenant_current": "",
-    "tenant_total": 0,
-    "tenant_index": 0,
-    "packages_total": 0,
-    "packages_done": 0,
-    "started_at": None,
-    "errors": []
-}
-
-
-# ============================================================================
-# ADMIN WHATSAPP ALERT HELPERS
-# ============================================================================
-
-def _send_admin_alert(whatsapp: WhatsAppSender, message: str):
-    """Send a WhatsApp alert to the admin. Never fails silently."""
-    if not whatsapp or not config.ADMIN_WHATSAPP:
-        logger.error(f"Cannot send admin alert (no whatsapp/admin number): {message}")
-        return
-    try:
-        whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, message)
-        logger.info("Admin alert sent via WhatsApp")
-    except Exception as e:
-        logger.error(f"CRITICAL: Failed to send admin alert: {e}. Message was: {message}")
-
-
-def _alert_tenant_not_found(whatsapp: WhatsAppSender, tenant_number: int,
-                             tracking_numbers: List[str]):
-    """Alert admin: tenant exists in DynamoDB but not in tenant_mapping."""
-    now = datetime.now(COT).strftime("%d/%m/%Y %I:%M %p")
-    guides = ", ".join(tracking_numbers[:5])
-    if len(tracking_numbers) > 5:
-        guides += f" ... (+{len(tracking_numbers) - 5} mas)"
-
-    msg = (
-        f"\u26a0\ufe0f *SonIA Tracker \u2014 Alerta*\n\n"
-        f"Tenant #{tenant_number} existe en DynamoDB pero no se "
-        f"encontro en tenant_mapping.\n\n"
-        f"\U0001f4e6 Guias pendientes: {len(tracking_numbers)}\n"
-        f"\U0001f4cb Tracking: {guides}\n\n"
-        f'*Accion requerida:* Sincronizar este tenant usando '
-        f"POST /admin/sync-tenants para agregarlo a la base de datos.\n\n"
-        f"\U0001f916 SonIA Tracker \u2014 {now}"
-    )
-    _send_admin_alert(whatsapp, msg)
-
-
-def _alert_no_whatsapp_contacts(whatsapp: WhatsAppSender, tenant_name: str,
-                                 tenant_number: int, tracking_count: int):
-    """Alert admin: tenant has no WhatsApp contacts in tenant_mapping."""
-    now = datetime.now(COT).strftime("%d/%m/%Y %I:%M %p")
-    msg = (
-        f"\u26a0\ufe0f *SonIA Tracker \u2014 Alerta*\n\n"
-        f"El tenant {tenant_name} (#{tenant_number}) "
-        f"no tiene contactos con WhatsApp asignados.\n\n"
-        f"\U0001f4e6 Guias pendientes: {tracking_count}\n\n"
-        f"*Accion requerida:* Agregar contactos a este tenant "
-        f"usando POST /admin/sync-tenants.\n\n"
-        f"\U0001f916 SonIA Tracker \u2014 {now}"
-    )
-    _send_admin_alert(whatsapp, msg)
-
-
-def _alert_flow_error(whatsapp: WhatsAppSender, tenant_number: Optional[int],
-                       client_name: str, error_type: str, error_msg: str,
-                       affected_count: int, total_count: int,
-                       scope: str = "Solo este cliente"):
-    """Alert admin: error during SonIA Tracker processing."""
-    now = datetime.now(COT).strftime("%d/%m/%Y %I:%M %p")
-    client_label = f"{client_name} (Tenant #{tenant_number})" if tenant_number else client_name
-    msg = (
-        f"\U0001f6a8 *SonIA Tracker \u2014 Error*\n\n"
-        f"Se produjo un error durante el ciclo diario:\n\n"
-        f"\U0001f464 Cliente/Tenant: {client_label}\n"
-        f"\u274c Tipo de error: {error_type}\n"
-        f"\U0001f4e6 Guias afectadas: {affected_count}\n"
-        f"\U0001f4ca Total guias en ciclo: {total_count} (excluyendo entregadas)\n"
-        f"\U0001f504 Alcance: {scope}\n\n"
-        f"Detalle: {error_msg[:300]}\n\n"
-        f"\U0001f916 SonIA Tracker \u2014 {now}"
-    )
-    _send_admin_alert(whatsapp, msg)
-
-
-# ============================================================================
-# DAILY ORCHESTRATION FLOW
-# ============================================================================
-
-async def run_daily_flow(modules: dict):
+def run_daily_flow(manual: bool = False):
     """
-    Main daily orchestration with tenant_mapping lookup:
-    1. Read shipments from DynamoDB
-    2. Group by tenant number
-    3. Look up tenant info in tenant_mapping table
-    4. For each tenant: FedEx tracking -> report -> WhatsApp
-    5. ALL errors are notified to admin via WhatsApp
+    Main daily orchestration flow.
+    This is the core function that runs every day at 4 AM COT.
     """
-    global flow_progress
-
-    db = modules.get("db")
-    dynamo = modules.get("dynamo")
-    fedex = modules.get("fedex")
-    anomaly_detector = modules.get("anomaly")
-    report_gen = modules.get("reports")
-    whatsapp = modules.get("whatsapp")
-
-    if not db:
-        logger.error("DB not available, cannot run daily flow")
-        flow_progress["running"] = False
-        return
-
-    # Set running flag
-    flow_progress["running"] = True
-    flow_progress["started_at"] = datetime.now(COT).isoformat()
-    flow_progress["phase"] = "initializing"
-    flow_progress["errors"] = []
-
-    now = datetime.now(COT)
-    logger.info(f"=== Starting daily flow at {now.strftime('%Y-%m-%d %H:%M:%S')} COT ===")
-
-    # Create run log
-    run_id = db.create_run_log(now.date())
-    stats = {
-        "total_shipments_read": 0,
-        "tenants_found": 0,
-        "tenants_in_mapping": 0,
-        "tenants_missing_mapping": 0,
-        "tenants_no_whatsapp": 0,
-        "new_shipments": 0,
-        "shipments_checked": 0,
-        "shipments_updated": 0,
-        "shipments_delivered": 0,
-        "claims_created": 0,
-        "reports_generated": 0,
-        "reports_sent": 0,
-        "alerts_sent": 0,
-    }
-    errors = []
-    total_active_packages = 0  # Total non-delivered packages across all tenants
-
-    try:
-        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 1: Read from DynamoDB ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-        flow_progress["phase"] = "reading_dynamodb"
-        logger.info("Step 1: Reading shipments from DynamoDB...")
-        raw_shipments = []
-        if dynamo:
-            try:
-                raw_shipments = dynamo.scan_all_reserves()
-                stats["total_shipments_read"] = len(raw_shipments)
-                logger.info(f"Read {len(raw_shipments)} reserves from DynamoDB")
-            except Exception as e:
-                logger.error(f"DynamoDB read error: {e}")
-                errors.append({"step": "dynamo_read", "error": str(e)})
-                _alert_flow_error(
-                    whatsapp, None, "N/A", "Error leyendo DynamoDB",
-                    str(e), 0, 0, "Todo el flujo diario se detuvo"
-                )
-                stats["alerts_sent"] += 1
-                db.update_run_log(run_id, stats, errors, "failed")
-                flow_progress["running"] = False
-                return
-        else:
-            logger.error("DynamoDB module not available")
-            _alert_flow_error(
-                whatsapp, None, "N/A", "Modulo DynamoDB no disponible",
-                "DynamoReader no inicializado", 0, 0,
-                "Todo el flujo diario se detuvo"
-            )
-            stats["alerts_sent"] += 1
-            db.update_run_log(run_id, stats, errors, "failed")
-            flow_progress["running"] = False
-            return
-
-        if not raw_shipments:
-            logger.info("No shipments found in DynamoDB. Nothing to process.")
-            db.update_run_log(run_id, stats, errors, "success")
-            flow_progress["running"] = False
-            return
-
-        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 2: Group by tenant ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-        flow_progress["phase"] = "grouping_by_tenant"
-        logger.info("Step 2: Grouping shipments by tenant...")
-        tenant_groups = defaultdict(list)
-        for reserve in raw_shipments:
-            tenant_id = reserve.get("tenant")
-            if tenant_id is not None:
-                tenant_groups[int(tenant_id)].append(reserve)
-            else:
-                logger.warning(f"Reserve {reserve.get('id', '?')} has no tenant ID")
-
-        stats["tenants_found"] = len(tenant_groups)
-        flow_progress["tenant_total"] = len(tenant_groups)
-        logger.info(f"Found {len(tenant_groups)} unique tenants: {list(tenant_groups.keys())}")
-
-        # Count total active (non-delivered) packages across all tenants
-        for tenant_id, reserves in tenant_groups.items():
-            for reserve in reserves:
-                for pkg in reserve.get("packages", []):
-                    if pkg.get("status", "").lower() != "delivered":
-                        total_active_packages += 1
-
-        flow_progress["packages_total"] = total_active_packages
-
-        # ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 3: Load tenant data from Odoo spreadsheet ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-        flow_progress["phase"] = "loading_odoo_spreadsheet"
-        logger.info("Step 3: Loading tenant data from Odoo WhatsApp BBDD spreadsheet...")
-        odoo = modules.get("odoo")
-        try:
-            if not odoo:
-                raise Exception("Odoo module not available")
-
-            auth_ok = odoo.authenticate()
-            if not auth_ok:
-                raise Exception("Odoo authentication failed")
-
-            bbdd = odoo.get_whatsapp_bbdd(config.ODOO_SPREADSHEET_ID)
-            odoo_tenant_names = bbdd.get("tenant_mapping", {})
-            odoo_contacts = bbdd.get("contacts", [])
-
-            if not odoo_tenant_names:
-                raise Exception(f"No tenant mappings found in spreadsheet {config.ODOO_SPREADSHEET_ID}")
-
-            # Build tenant_mapping in expected format:
-            # {tenant_id: {"tenant_name": name, "whatsapp_numbers": [...]}}
-            tenant_mapping = {}
-            for tid, tname in odoo_tenant_names.items():
-                whatsapp_nums = [
-                    c["whatsapp"] for c in odoo_contacts
-                    if c.get("tenant_number") == tid and c.get("whatsapp")
-                ]
-                email_addrs = [
-                    c["email"] for c in odoo_contacts
-                    if c.get("tenant_number") == tid and c.get("email")
-                ]
-                tenant_mapping[tid] = {
-                    "tenant_name": tname,
-                    "whatsapp_numbers": whatsapp_nums,
-                    "email_addresses": email_addrs,
-                }
-
-            logger.info(
-                f"Loaded {len(tenant_mapping)} tenant mappings from Odoo, "
-                f"{len(odoo_contacts)} contacts from Hoja 1"
-            )
-        except Exception as e:
-            logger.error(f"Error loading Odoo spreadsheet: {e}")
-            errors.append({"step": "load_odoo_spreadsheet", "error": str(e)})
-            _alert_flow_error(
-                whatsapp, None, "N/A", "Error leyendo spreadsheet Odoo",
-                str(e), total_active_packages, total_active_packages,
-                "Todo el flujo diario se detuvo"
-            )
-            stats["alerts_sent"] += 1
-            db.update_run_log(run_id, stats, errors, "failed")
-            flow_progress["running"] = False
-            return
-
-        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Step 4: Process each tenant ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-        flow_progress["phase"] = "processing_tenants"
-        logger.info("Step 4: Processing tenants...")
-        tenant_list = list(tenant_groups.items())
-        for tenant_index, (tenant_id, reserves) in enumerate(tenant_list):
-            flow_progress["tenant_index"] = tenant_index
-            flow_progress["tenant_current"] = str(tenant_id)
-
-            try:
-                # Get tenant info from mapping
-                tenant_info = tenant_mapping.get(tenant_id)
-                if not tenant_info:
-                    logger.warning(f"Tenant #{tenant_id} not found in tenant_mapping!")
-                    tracking_numbers = []
-                    for reserve in reserves:
-                        for pkg in reserve.get("packages", []):
-                            tn = pkg.get("tracking_number", "")
-                            if tn:
-                                tracking_numbers.append(tn)
-                    _alert_tenant_not_found(whatsapp, tenant_id, tracking_numbers)
-                    stats["tenants_missing_mapping"] += 1
-                    stats["alerts_sent"] += 1
-                    continue
-
-                tenant_name = tenant_info.get("tenant_name", f"Tenant #{tenant_id}")
-                whatsapp_numbers = tenant_info.get("whatsapp_numbers", [])
-                email_addresses = tenant_info.get("email_addresses", [])
-                stats["tenants_in_mapping"] += 1
-
-                await _process_tenant(
-                    tenant_id=tenant_id,
-                    tenant_name=tenant_name,
-                    whatsapp_numbers=whatsapp_numbers,
-                    email_addresses=email_addresses,
-                    reserves=reserves,
-                    modules=modules,
-                    stats=stats,
-                    errors=errors,
-                    total_active_packages=total_active_packages,
-                )
-            except Exception as e:
-                logger.error(f"Critical error processing tenant #{tenant_id}: {e}")
-                tb = traceback.format_exc()
-                logger.error(tb)
-                errors.append({
-                    "step": f"process_tenant_{tenant_id}",
-                    "error": str(e),
-                    "traceback": tb[:500],
-                })
-
-                # Count affected packages for this tenant
-                tenant_pkgs = sum(
-                    len(r.get("packages", [])) for r in reserves
-                )
-                _alert_flow_error(
-                    whatsapp, tenant_id, f"Tenant #{tenant_id}",
-                    "Error critico procesando tenant",
-                    str(e), tenant_pkgs, total_active_packages,
-                    "Solo este cliente"
-                )
-                stats["alerts_sent"] += 1
-
-        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate consolidated Excel report ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
-        excel_gen = modules.get("excel_gen")
-        if excel_gen and db:
-            try:
-                all_shipments = {}
-                for tid, reserves in tenant_groups.items():
-                    t_info = tenant_mapping.get(tid)
-                    if t_info:
-                        t_name = t_info.get("tenant_name", f"Tenant #{tid}")
-                        client_db_id = t_info.get("client_db_id")
-                        if client_db_id:
-                            rows = db.get_shipments_by_client(client_db_id)
-                            if rows:
-                                all_shipments[t_name] = [dict(r) for r in rows]
-                if all_shipments:
-                    consolidated_path = excel_gen.generate_consolidated_report(all_shipments)
-                    if consolidated_path:
-                        stats["consolidated_excel"] = consolidated_path
-                        logger.info(f"Consolidated Excel report: {consolidated_path}")
-                        # Send consolidated to admin
-                        if whatsapp and config.ADMIN_WHATSAPP:
-                            try:
-                                whatsapp.send_file_sync(
-                                    phone_number=config.ADMIN_WHATSAPP,
-                                    file_path=consolidated_path,
-                                    caption="SonIA Tracker - Reporte Consolidado",
-                                )
-                                logger.info("Consolidated Excel sent to admin")
-                            except Exception as e:
-                                logger.error(f"Error sending consolidated Excel: {e}")
-            except Exception as e:
-                logger.error(f"Error generating consolidated Excel: {e}")
-
-
-        # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Finalize ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-        flow_progress["phase"] = "finalizing"
-        status = "success" if not errors else "partial"
-        db.update_run_log(run_id, stats, errors, status)
-        logger.info(f"=== Daily flow completed: {status} | Stats: {stats} ===")
-
-        # Send admin summary if there were errors
-        if errors:
-            now_str = datetime.now(COT).strftime("%d/%m/%Y %I:%M %p")
-            summary = (
-                f"\U0001f4ca *SonIA Tracker \u2014 Resumen Diario*\n\n"
-                f"Estado: {'Parcial' if status == 'partial' else 'Fallido'}\n"
-                f"Errores: {len(errors)}\n"
-                f"Tenants procesados: {stats['tenants_in_mapping']}/{stats['tenants_found']}\n"
-                f"Reportes enviados: {stats['reports_sent']}\n"
-                f"Alertas enviadas: {stats['alerts_sent']}\n\n"
-                f"\U0001f916 SonIA Tracker \u2014 {now_str}"
-            )
-            _send_admin_alert(whatsapp, summary)
-
-    except Exception as e:
-        logger.error(f"Daily flow critical error: {e}")
-        tb = traceback.format_exc()
-        logger.error(tb)
-        if db and run_id:
-            errors.append({"step": "critical", "error": str(e)})
-            db.update_run_log(run_id, stats, errors, "failed")
-        _alert_flow_error(
-            whatsapp, None, "N/A", "Error critico en flujo diario",
-            str(e), total_active_packages, total_active_packages,
-            "Todo el flujo diario se detuvo"
-        )
-    finally:
-        # Always clear running flag
-        flow_progress["running"] = False
-        flow_progress["phase"] = "idle"
-
-
-async def _process_tenant(tenant_id: int, tenant_name: str, whatsapp_numbers: List[str],
-                           email_addresses: List[str],
-                           reserves: List[Dict], modules: dict, stats: dict, errors: list,
-                           total_active_packages: int):
-    """
-    Process all reserves for a single tenant:
-    1. Extract tracking numbers (skip delivered)
-    2. Store in PostgreSQL
-    3. Query FedEx for active shipments
-    4. Detect anomalies
-    5. Generate and send report
-    """
-    global flow_progress
-
-    db = modules.get("db")
-    fedex = modules.get("fedex")
-    anomaly_detector = modules.get("anomaly")
-    report_gen = modules.get("reports")
-    whatsapp = modules.get("whatsapp")
-
-    logger.info(f"--- Processing Tenant #{tenant_id}: {tenant_name} ({len(reserves)} reserves) ---")
-    flow_progress["tenant_current"] = f"{tenant_name} (#{tenant_id})"
-
-    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Get delivered tracking numbers from shipments table ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-    delivered_tracking = set()
-    try:
-        undelivered = db.get_undelivered_shipments()
-        # Complement set: all shipments minus undelivered = delivered
-        if undelivered:
-            all_tn = set()
-            for reserve in reserves:
-                for pkg in reserve.get("packages", []):
-                    tn = pkg.get("tracking_number", "")
-                    if tn:
-                        all_tn.add(tn)
-            undelivered_set = set(s.get("tracking_number") for s in undelivered if s.get("tracking_number"))
-            delivered_tracking = all_tn - undelivered_set
-    except Exception as e:
-        logger.warning(f"Could not load delivered shipments: {e}")
-
-    # Collect all tracking numbers from packages
-    all_tracking = []
-    active_tracking = []
-    for reserve in reserves:
-        for pkg in reserve.get("packages", []):
-            tn = pkg.get("tracking_number", "")
-            if tn:
-                all_tracking.append(tn)
-                # Skip only if Railway DB already has FedEx data for this tracking
-                if tn not in delivered_tracking:
-                    active_tracking.append(tn)
-
-    logger.info(f"Tenant #{tenant_id}: {len(all_tracking)} total packages, {len(active_tracking)} active, {len(delivered_tracking)} already delivered")
-
-    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Store shipments in PostgreSQL ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-    # Get or create client in DB
-    client_info = db.get_client_by_tenant(tenant_id)
-    client_db_id = client_info.get("client_id") if client_info else None
-
-    for reserve in reserves:
-        for pkg in reserve.get("packages", []):
-            tn = pkg.get("tracking_number", "")
-            if not tn:
-                continue
-            try:
-                inserted = db.upsert_shipment({
-                    "tracking_number": tn,
-                    "client_id": client_db_id,
-                    "client_name_raw": tenant_name,
-                    "dynamo_data": reserve,
-                })
-                if inserted:
-                    stats["new_shipments"] += 1
-            except Exception as e:
-                logger.error(f"DB upsert error for {tn}: {e}")
-
-    # Check if we have WhatsApp contacts
-    if not whatsapp_numbers:
-        logger.warning(f"No WhatsApp contacts for {tenant_name} (Tenant #{tenant_id})")
-        _alert_no_whatsapp_contacts(whatsapp, tenant_name, tenant_id, len(active_tracking))
-        stats["tenants_no_whatsapp"] += 1
-        stats["alerts_sent"] += 1
-
-    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Query FedEx for active tracking numbers ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-    if fedex and active_tracking:
-        logger.info(f"Querying FedEx for {len(active_tracking)} active packages...")
-        batch_size = 30
-        for i in range(0, len(active_tracking), batch_size):
-            batch = active_tracking[i:i + batch_size]
-            try:
-                results = fedex.track_multiple(batch)
-                stats["shipments_checked"] += len(batch)
-
-                for tracking_num, fedex_data in results.items():
-                    if fedex_data.get("error"):
-                        continue
-                    updated = db.update_shipment_from_fedex(
-                        tracking_number=tracking_num,
-                        fedex_data=fedex_data,
-                    )
-                    if updated:
-                        stats["shipments_updated"] += 1
-                        if fedex_data.get("is_delivered"):
-                            stats["shipments_delivered"] += 1
-                            flow_progress["packages_done"] += 1
-            except Exception as e:
-                logger.error(f"FedEx batch error for tenant #{tenant_id}: {e}")
-                errors.append({
-                    "step": f"fedex_track_tenant_{tenant_id}",
-                    "error": str(e),
-                    "batch_index": i,
-                })
-                _alert_flow_error(
-                    whatsapp, tenant_id, tenant_name,
-                    "Error consultando FedEx",
-                    str(e), len(batch), total_active_packages,
-                    "Solo este cliente"
-                )
-                stats["alerts_sent"] += 1
-
-    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Detect anomalies ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-    if anomaly_detector and client_db_id:
-        try:
-            client_shipments = db.get_shipments_by_client(client_db_id)
-            if client_shipments:
-                shipment_dicts = [dict(s) for s in client_shipments]
-                anomalies = anomaly_detector.check_all_shipments(shipment_dicts)
-
-                for anomaly in anomalies:
-                    claim_id = db.create_proactive_claim(
-                        tracking_number=anomaly["tracking_number"],
-                        shipment_id=anomaly.get("shipment_id"),
-                        client_id=client_db_id,
-                        claim_type=anomaly["claim_type"],
-                        description=anomaly["description"],
-                        rule=anomaly["rule"],
-                    )
-                    if claim_id:
-                        stats["claims_created"] += 1
-        except Exception as e:
-            logger.error(f"Anomaly detection error for tenant #{tenant_id}: {e}")
-            errors.append({
-                "step": f"anomaly_tenant_{tenant_id}",
-                "error": str(e),
-            })
-
-    # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Generate report ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-    if report_gen and client_db_id:
-        try:
-            client_shipments = db.get_shipments_by_client(client_db_id)
-            if client_shipments:
-                report = report_gen.generate_client_report(
-                    client_name=tenant_name,
-                    shipments=[dict(s) for s in client_shipments],
-                )
-                stats["reports_generated"] += 1
-
-                # ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ Send report via WhatsApp ÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ
-                if whatsapp and whatsapp_numbers:
-                    for phone_number in whatsapp_numbers:
-                        try:
-                            sent = whatsapp.send_report_sync(
-                                phone_number=phone_number,
-                                report_text=report,
-                                client_name=tenant_name,
-                            )
-                            if sent:
-                                stats["reports_sent"] += 1
-                                logger.info(
-                                    f"Report sent to {phone_number} for {tenant_name}"
-                                )
-                        except Exception as e:
-                            logger.error(
-                                f"WhatsApp send error to {phone_number}: {e}"
-                            )
-                            errors.append({
-                                "step": f"whatsapp_send_tenant_{tenant_id}",
-                                "phone": phone_number,
-                                "error": str(e),
-                            })
-                            _alert_flow_error(
-                                whatsapp, tenant_id, tenant_name,
-                                "Error enviando reporte WhatsApp",
-                                f"Numero: {phone_number} - {str(e)}",
-                                len(active_tracking), total_active_packages,
-                                "Solo este cliente"
-                            )
-                            stats["alerts_sent"] += 1
-
-                # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Send report via Email ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
-                email_sender = modules.get("email")
-                if email_sender and email_addresses:
-                    for email_addr in email_addresses:
-                        try:
-                            sent = email_sender.send_report_email(
-                                to_email=email_addr,
-                                client_name=tenant_name,
-                                report_text=report,
-                            )
-                            if sent:
-                                stats["email_reports_sent"] = stats.get("email_reports_sent", 0) + 1
-                                logger.info(f"Email report sent to {email_addr} for {tenant_name}")
-                        except Exception as e:
-                            logger.error(f"Email send error to {email_addr}: {e}")
-                            errors.append({
-                                "step": f"email_send_tenant_{tenant_id}",
-                                "email": email_addr,
-                                "error": str(e),
-                            })
-
-        except Exception as e:
-            logger.error(f"Report generation error for tenant #{tenant_id}: {e}")
-            errors.append({
-                "step": f"report_gen_tenant_{tenant_id}",
-                "error": str(e),
-            })
-
-
-    # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Generate Excel report per tenant ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
-    excel_gen = modules.get("excel_gen")
-    if excel_gen and client_db_id:
-        try:
-            client_shipments_for_excel = db.get_shipments_by_client(client_db_id)
-            if client_shipments_for_excel:
-                shipment_dicts_excel = [dict(s) for s in client_shipments_for_excel]
-                excel_path = excel_gen.generate_tenant_report(
-                    tenant_name=tenant_name,
-                    shipments=shipment_dicts_excel,
-                )
-                if excel_path:
-                    stats["excel_reports_generated"] = stats.get("excel_reports_generated", 0) + 1
-                    logger.info(f"Excel report generated for {tenant_name}: {excel_path}")
-
-                    # Send Excel via WhatsApp to tenant contacts
-                    if whatsapp and whatsapp_numbers:
-                        for phone_number in whatsapp_numbers:
-                            try:
-                                sent = whatsapp.send_file_sync(
-                                    phone_number=phone_number,
-                                    file_path=excel_path,
-                                    caption=f"SonIA Tracker - Reporte {tenant_name}",
-                                )
-                                if sent:
-                                    stats["excel_reports_sent"] = stats.get("excel_reports_sent", 0) + 1
-                            except Exception as e:
-                                logger.error(f"Error sending Excel to {phone_number}: {e}")
-
-                    # Send Excel via Email to tenant contacts
-                    email_sender = modules.get("email")
-                    if email_sender and email_addresses:
-                        for email_addr in email_addresses:
-                            try:
-                                sent = email_sender.send_report_email(
-                                    to_email=email_addr,
-                                    client_name=tenant_name,
-                                    report_text=f"Adjunto encontraras el reporte Excel de tracking para {tenant_name}.",
-                                    excel_path=excel_path,
-                                )
-                                if sent:
-                                    stats["excel_emails_sent"] = stats.get("excel_emails_sent", 0) + 1
-                            except Exception as e:
-                                logger.error(f"Error sending Excel email to {email_addr}: {e}")
-
-        except Exception as e:
-            logger.error(f"Excel generation error for tenant #{tenant_id}: {e}")
-
-    logger.info(f"--- Tenant #{tenant_id} ({tenant_name}) processing complete ---")
-
-
-# ============================================================================
-# FASTAPI APP
-# ============================================================================
-
-scheduler = AsyncIOScheduler()
-modules = {}
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown."""
-    global modules
-
-    # Run migration
-    logger.info("Running database migration check...")
-    run_migration()
+    start_time = datetime.now(COT)
+    trigger = "manual" if manual else "scheduled"
+    logger.info(f"{'='*60}")
+    logger.info(f"DAILY FLOW STARTED ({trigger}) at {start_time.strftime('%Y-%m-%d %H:%M:%S')} COT")
+    logger.info(f"{'='*60}")
 
     # Initialize modules
-    logger.info("Initializing modules...")
-    modules = init_modules()
-
-    # Schedule daily job
-    run_hour = config.RUN_HOUR_COT
-    scheduler.add_job(
-        run_daily_flow,
-        CronTrigger(hour=run_hour, minute=0, timezone=COT),
-        args=[modules],
-        id="daily_flow",
-        name=f"SonIA Daily Flow ({run_hour}:00 COT)",
-        replace_existing=True,
-    )
-    scheduler.start()
-
-    # Schedule daily invoicing (Mon-Fri at 17:00 COT)
-    scheduler.add_job(
-        _run_invoicing_safe,
-        CronTrigger(hour=17, minute=0, day_of_week="mon-fri", timezone=COT),
-        id="daily_invoicing",
-        name="Odoo Daily Invoicing (17:00 COT Mon-Fri)",
-        replace_existing=True,
-    )
-    logger.info("Invoicing scheduler added - Mon-Fri at 17:00 COT")
-    logger.info(f"Scheduler started - daily flow at {run_hour}:00 COT")
-
-    yield
-
-    # Shutdown
-    scheduler.shutdown()
-    if "db" in modules:
-        modules["db"].close()
-    logger.info("SonIA Core shut down")
-
-
-app = FastAPI(
-    title="SonIA Core",
-    description="Daily Tracking Orchestrator - BloomsPal",
-    version="1.2.0",
-    lifespan=lifespan,
-)
-
-
-# ============================================================================
-# INVOICING
-# ============================================================================
-
-invoicing_progress = {"running": False, "last_run": None, "last_error": None}
-
-
-async def _run_invoicing_safe():
-    """Run daily invoicing with error handling (for scheduler)."""
-    global invoicing_progress
-    if invoicing_progress["running"]:
-        logger.warning("Invoicing already running, skipping")
-        return
-    invoicing_progress["running"] = True
-    try:
-        logger.info("=== Starting scheduled invoicing run ===")
-        import asyncio
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, run_daily_invoicing)
-        invoicing_progress["last_run"] = datetime.now(COT).isoformat()
-        invoicing_progress["last_error"] = None
-        logger.info("=== Scheduled invoicing completed ===")
-    except Exception as e:
-        invoicing_progress["last_error"] = str(e)
-        logger.error(f"Invoicing failed: {e}", exc_info=True)
-    finally:
-        invoicing_progress["running"] = False
-
-
-# ============================================================================
-# STANDARD ENDPOINTS
-# ============================================================================
-
-@app.get("/")
-async def root():
-    return {
-        "service": "SonIA Core",
-        "status": "running",
-        "environment": config.ENVIRONMENT,
-        "version": "1.2.0",
-    }
-
-
-@app.get("/health")
-async def health():
-    db = modules.get("db")
-    db_ok = False
-    if db:
-        try:
-            db_ok = db.health_check()
-        except Exception:
-            pass
-
-    return {
-        "status": "healthy" if db_ok else "degraded",
-        "database": "connected" if db_ok else "disconnected",
-        "modules": list(modules.keys()),
-        "flow_running": flow_progress["running"],
-        "timestamp": datetime.now(COT).isoformat(),
-    }
-
-
-@app.get("/stats")
-async def get_stats():
-    """Get latest run statistics."""
-    db = modules.get("db")
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
+    db = None
+    fedex = None
+    run_id = None
+    unmapped_tenants = set()
 
     try:
+        # ── Initialize Database ──
+        db = DBManager(config.DATABASE_URL)
         db.connect()
-        db.cursor.execute(
-            "SELECT * FROM daily_run_logs ORDER BY created_at DESC LIMIT 5"
-        )
-        runs = db.cursor.fetchall()
-        db.close()
-        return {"recent_runs": [dict(r) for r in runs] if runs else []}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# PROGRESS & FLOW CONTROL ENDPOINTS
-# ============================================================================
-
-@app.get("/admin/progress")
-async def admin_progress():
-    """Get current flow progress state."""
-    return flow_progress
-
-
-@app.post("/admin/run-now")
-async def admin_run_now():
-    """Trigger the daily flow immediately as a background task."""
-    global flow_progress
-
-    if flow_progress["running"]:
-        raise HTTPException(status_code=409, detail="Flow is already running")
-
-    if not modules:
-        raise HTTPException(status_code=503, detail="Modules not initialized")
-
-    import asyncio
-    asyncio.create_task(run_daily_flow(modules))
-    return {"status": "started", "timestamp": datetime.now(COT).isoformat()}
-
-
-
-# ============================================================================
-# INVOICING ADMIN ENDPOINTS
-# ============================================================================
-
-@app.get("/admin/invoicing/status")
-async def invoicing_status():
-    """Check invoicing scheduler status and last run info."""
-    return {
-        "running": invoicing_progress["running"],
-        "last_run": invoicing_progress["last_run"],
-        "last_error": invoicing_progress["last_error"],
-        "schedule": "Mon-Fri 17:00 COT",
-        "timestamp": datetime.now(COT).isoformat(),
-    }
-
-
-@app.post("/admin/invoicing/preview")
-async def invoicing_preview():
-    """Preview: show unprocessed cortes without creating invoices."""
-    try:
-        from modules.odoo_invoicing.config import (
-            AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
-            DYNAMO_TABLE_CARRIER_REPORTS, DYNAMO_TABLE_FEDEX_CONSOLIDATIONS,
-            SONIA_DB_URL,
-        )
-        from modules.odoo_invoicing.db_tracking import TrackingDB
-        from modules.odoo_invoicing.corte_reader import CorteReader
-
-        tracking = TrackingDB(SONIA_DB_URL)
-        tracking.connect()
-        tracking.initialize_tables()
-        processed_ids = tracking.get_processed_corte_ids()
-
-        reader = CorteReader(
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            aws_region=AWS_REGION,
-            carrier_reports_table=DYNAMO_TABLE_CARRIER_REPORTS,
-            fedex_consolidations_table=DYNAMO_TABLE_FEDEX_CONSOLIDATIONS,
-        )
-        new_cortes = reader.fetch_unprocessed_cortes(processed_ids)
-        tracking.close()
-
-        from collections import defaultdict
-        by_tenant = defaultdict(list)
-        for ct in new_cortes:
-            by_tenant[ct.tenant].append(ct)
-
-        preview = {
-            "total_unprocessed_cortes": len(new_cortes),
-            "already_processed": len(processed_ids),
-            "tenants": {
-                str(tid): {
-                    "cortes_count": len(cortes),
-                    "tenant_name": cortes[0].tenant_name or f"Tenant-{tid}",
-                    "corte_ids": [ct.corte_id for ct in cortes],
-                }
-                for tid, cortes in by_tenant.items()
-            },
-            "timestamp": datetime.now(COT).isoformat(),
-        }
-        return preview
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
-
-
-@app.post("/admin/invoicing/run")
-async def invoicing_run():
-    """Run invoicing now (creates real invoices in Odoo)."""
-    global invoicing_progress
-    if invoicing_progress["running"]:
-        raise HTTPException(status_code=409, detail="Invoicing is already running")
-    import asyncio
-    asyncio.create_task(_run_invoicing_safe())
-    return {
-        "status": "started",
-        "message": "Invoicing started in background. Check /admin/invoicing/status for progress.",
-        "timestamp": datetime.now(COT).isoformat(),
-    }
-
-
-# ============================================================================
-# ADMIN ENDPOINTS
-# ============================================================================
-
-
-@app.post("/admin/sync-products")
-async def sync_products(limit: int = 0, brand: str = "", dry_run: bool = True):
-    """
-    Sync products from BloomsPal Excel data to Odoo.
-    
-    - limit=0 means all products (199)
-    - brand="" means all brands (filter by exact brand name)
-    - dry_run=True means preview only (no actual creation)
-    
-    Usage:
-      Preview all:     POST /admin/sync-products?dry_run=true
-      Preview 1:       POST /admin/sync-products?limit=1&dry_run=true
-      Create 1 test:   POST /admin/sync-products?limit=1&dry_run=false
-      Create all DMC:  POST /admin/sync-products?brand=Dios%20Mio%20Coffee&dry_run=false
-      Create all:      POST /admin/sync-products?dry_run=false
-    """
-    from modules.odoo_invoicing.config import ODOO_URL, ODOO_DB, ODOO_USER, ODOO_API_KEY
-    from modules.odoo_invoicing.odoo_client import OdooClient
-    
-    try:
-        odoo = OdooClient(ODOO_URL, ODOO_DB, ODOO_USER, ODOO_API_KEY)
-        odoo.connect()
-        
-        results = sync_products_to_odoo(
-            odoo=odoo,
-            limit=limit,
-            brand_filter=brand,
-            dry_run=dry_run,
-        )
-        
-        return {
-            "status": "success",
-            "dry_run": dry_run,
-            "results": results,
-            "timestamp": datetime.now(COT).isoformat(),
-        }
-    except Exception as e:
-        logger.error(f"Product sync error: {e}", exc_info=True)
-        return {"status": "error", "error": str(e)}
-
-@app.post("/admin/sync-tenants")
-async def admin_sync_tenants(data: Dict[str, Any]):
-    """
-    Sync tenant data from spreadsheet into tenant_mapping and client_contacts.
-
-    Expected JSON body:
-    {
-        "tenant_names": {"1": "DIOS MIO COFFEE", "2": "EDEN FLOWERS", ...},
-        "tenant_contacts": {
-            "1": [{"name": "Carlos", "whatsapp": "573142285386"}, ...],
-            ...
-        }
-    }
-    """
-    db = modules.get("db")
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-
-    try:
-        tenant_names = data.get("tenant_names", {})
-        tenant_contacts = data.get("tenant_contacts", {})
-
-        if not tenant_names:
-            raise ValueError("tenant_names is required")
-
-        db.connect()
-
-        synced_count = 0
-        for tenant_id_str, tenant_name in tenant_names.items():
-            try:
-                tenant_id = int(tenant_id_str)
-
-                # Get or create client
-                client_info = db.get_client_by_tenant(tenant_id)
-                client_id = client_info.get("client_id") if client_info else None
-
-                if not client_id:
-                    # Create new client
-                    db.cursor.execute("""
-                        INSERT INTO clients (name, dynamo_tenant_id, is_active)
-                        VALUES (%s, %s, TRUE)
-                        ON CONFLICT (dynamo_tenant_id) DO UPDATE
-                        SET name = EXCLUDED.name
-                        RETURNING id
-                    """, (tenant_name, tenant_id))
-                    result = db.cursor.fetchone()
-                    client_id = result["id"] if result else None
-
-                if not client_id:
-                    logger.warning(f"Could not create/find client for tenant {tenant_id}")
-                    continue
-
-                # Upsert tenant_mapping
-                db.cursor.execute("""
-                    INSERT INTO tenant_mapping (dynamo_tenant_id, client_name, client_id)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (dynamo_tenant_id) DO UPDATE
-                    SET client_name = EXCLUDED.client_name, client_id = EXCLUDED.client_id
-                    RETURNING id
-                """, (tenant_id, tenant_name, client_id))
-                db.conn.commit()
-
-                # Insert contacts if provided
-                contacts = tenant_contacts.get(tenant_id_str, [])
-                for contact in contacts:
-                    name = contact.get("name")
-                    whatsapp = contact.get("whatsapp")
-                    if name and whatsapp:
-                        db.cursor.execute("""
-                            INSERT INTO client_contacts (client_id, name, whatsapp_number, is_active)
-                            VALUES (%s, %s, %s, TRUE)
-                            ON CONFLICT (client_id, name) DO UPDATE
-                            SET whatsapp_number = EXCLUDED.whatsapp_number
-                        """, (client_id, name, whatsapp))
-                        db.conn.commit()
-
-                synced_count += 1
-            except Exception as e:
-                logger.error(f"Error syncing tenant {tenant_id_str}: {e}")
-                try:
-                    db.conn.rollback()
-                except Exception:
-                    pass
-                continue
-
-        db.close()
-        return {
-            "status": "success",
-            "tenants_synced": synced_count,
-            "total_tenants": len(tenant_names),
-        }
-    except Exception as e:
-        db.close()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/admin/dynamo-scan")
-async def admin_dynamo_scan():
-    """Scan DynamoDB to see sample records and identify tenant IDs."""
-    dynamo = modules.get("dynamo")
-    if not dynamo:
-        raise HTTPException(status_code=503, detail="DynamoDB not available")
-
-    try:
-        response = dynamo.client.scan(
-            TableName=dynamo.table_name,
-            Limit=10
-        )
-        items = response.get("Items", [])
-        return {
-            "table": dynamo.table_name,
-            "count": response.get("Count", 0),
-            "scanned": response.get("ScannedCount", 0),
-            "items": items
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/admin/db-status")
-async def admin_db_status():
-    """Check database tables and record counts."""
-    db = modules.get("db")
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
-
-    try:
-        db.connect()
-        tables = ['clients', 'tenant_mapping', 'client_contacts',
-                   'shipments', 'claims', 'daily_run_logs']
-        counts = {}
-        for table in tables:
-            db.cursor.execute(f"SELECT COUNT(*) as count FROM {table}")
-            result = db.cursor.fetchone()
-            counts[table] = result["count"] if result else 0
-
-        db.cursor.execute("SELECT * FROM tenant_mapping")
-        mappings = db.cursor.fetchall()
-
-        db.close()
-        return {
-            "table_counts": counts,
-            "tenant_mappings": [dict(m) for m in mappings] if mappings else []
-        }
-    except Exception as e:
-        db.close()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/admin/test-whatsapp")
-async def admin_test_whatsapp(phone: str = None, message: str = None):
-    """
-    Test WhatsApp message delivery via SonIA Agent.
-    Defaults to sending a test message to the admin number.
-    """
-    whatsapp = modules.get("whatsapp")
-    if not whatsapp:
-        raise HTTPException(status_code=503, detail="WhatsApp module not available")
-
-    target_phone = phone or config.ADMIN_WHATSAPP
-    if not target_phone:
-        raise HTTPException(status_code=400, detail="No phone number provided and ADMIN_WHATSAPP not set")
-
-    now = datetime.now(COT).strftime("%d/%m/%Y %I:%M %p")
-    test_msg = message or (
-        f"\u2705 *SonIA Tracker \u2014 Test*\n\n"
-        f"Este es un mensaje de prueba.\n"
-        f"Si recibes esto, la conexion WhatsApp funciona correctamente.\n\n"
-        f"Modulos activos: {', '.join(modules.keys())}\n\n"
-        f"\U0001f916 SonIA Tracker \u2014 {now}"
-    )
-
-    try:
-        sent = whatsapp.send_message_sync(target_phone, test_msg)
-        return {
-            "status": "sent" if sent else "failed",
-            "phone": target_phone,
-            "timestamp": now,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/admin/test-odoo")
-async def admin_test_odoo(tenant_number: int = None):
-    """
-    Test Odoo connectivity and tenant lookup.
-    If tenant_number is provided, searches for that tenant.
-    Otherwise, lists all companies.
-    """
-    odoo = modules.get("odoo")
-    if not odoo:
-        raise HTTPException(status_code=503, detail="Odoo module not available")
-
-    try:
-        auth_ok = odoo.authenticate()
-        if not auth_ok:
-            return {"status": "error", "detail": "Odoo authentication failed"}
-
-        if tenant_number is not None:
-            company = odoo.find_company_by_tenant_number(
-                tenant_number, field_name=config.ODOO_TENANT_FIELD
-            )
-            if company:
-                contacts = odoo.get_whatsapp_contacts_for_company(company["id"])
-                return {
-                    "status": "found",
-                    "tenant_number": tenant_number,
-                    "company": company,
-                    "whatsapp_contacts": contacts,
-                }
-            else:
-                return {
-                    "status": "not_found",
-                    "tenant_number": tenant_number,
-                    "field_searched": config.ODOO_TENANT_FIELD,
-                    "hint": "Verify the tenant field exists in Odoo and has the correct value",
-                }
-        else:
-            companies = odoo.search_companies()
-            return {
-                "status": "ok",
-                "auth": "success",
-                "companies_found": len(companies),
-                "companies": companies[:10],
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/admin/test-spreadsheet")
-async def admin_test_spreadsheet():
-    """
-    Test reading the WhatsApp BBDD spreadsheet from Odoo Documents.
-    Tries multiple approaches and returns diagnostic info.
-    """
-    odoo = modules.get("odoo")
-    if not odoo:
-        raise HTTPException(status_code=503, detail="Odoo module not available")
-
-    try:
-        auth_ok = odoo.authenticate()
-        if not auth_ok:
-            return {"status": "error", "detail": "Odoo authentication failed"}
-
-        doc_id = config.ODOO_SPREADSHEET_ID
-
-        # Step 1: Diagnostic - test access approaches
-        diagnostic = odoo.test_spreadsheet_access(doc_id)
-
-        # Step 2: Try to read and parse the spreadsheet
-        parsed = None
-        try:
-            bbdd = odoo.get_whatsapp_bbdd(doc_id)
-            parsed = {
-                "tenant_mapping": {str(k): v for k, v in bbdd.get("tenant_mapping", {}).items()},
-                "contacts_count": len(bbdd.get("contacts", [])),
-                "contacts": bbdd.get("contacts", []),
-            }
-        except Exception as e:
-            parsed = {"error": str(e)}
-
-        return {
-            "status": "ok",
-            "spreadsheet_id": doc_id,
-            "diagnostic": diagnostic,
-            "parsed_data": parsed,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/admin/test-flow")
-async def admin_test_flow(tenant_number: int = None):
-    """
-    Run the daily flow for a single tenant (dry-run style test).
-    If no tenant_number provided, reads DynamoDB and processes the first tenant found.
-    """
-    global flow_progress
-
-    if flow_progress["running"]:
-        raise HTTPException(status_code=409, detail="Flow is already running")
-
-    if not modules:
-        raise HTTPException(status_code=503, detail="Modules not initialized")
-
-    dynamo = modules.get("dynamo")
-    db = modules.get("db")
-    if not dynamo:
-        raise HTTPException(status_code=503, detail="DynamoDB not available")
-
-    try:
-        # Read from DynamoDB
-        raw_shipments = dynamo.scan_all_reserves()
-        if not raw_shipments:
-            return {"status": "no_data", "detail": "No shipments in DynamoDB"}
-
-        # Group by tenant
-        tenant_groups = defaultdict(list)
-        for reserve in raw_shipments:
-            tid = reserve.get("tenant")
-            if tid is not None:
-                tenant_groups[int(tid)].append(reserve)
-
-        # Pick the target tenant
-        if tenant_number is not None:
-            if tenant_number not in tenant_groups:
-                return {
-                    "status": "tenant_not_in_dynamo",
-                    "tenant_number": tenant_number,
-                    "available_tenants": list(tenant_groups.keys()),
-                }
-            target_tid = tenant_number
-        else:
-            target_tid = list(tenant_groups.keys())[0]
-
-        reserves = tenant_groups[target_tid]
-
-        # Count packages
-        total_pkgs = sum(len(r.get("packages", [])) for r in reserves)
-        active_pkgs = sum(
-            1 for r in reserves for p in r.get("packages", [])
-            if p.get("status", "").lower() != "delivered"
-        )
-
-        # Load tenant_mapping
-        tenant_mapping = db.get_tenant_mapping() if db else {}
-        tenant_info = tenant_mapping.get(target_tid, {})
-        tenant_name = tenant_info.get("tenant_name", f"Tenant #{target_tid}")
-        whatsapp_numbers = tenant_info.get("whatsapp_numbers", [])
-
-        # Process just this tenant
-        test_stats = {
-            "total_shipments_read": len(raw_shipments),
-            "tenants_found": len(tenant_groups),
-            "tenants_in_mapping": 0,
-            "tenants_missing_mapping": 0,
-            "tenants_no_whatsapp": 0,
+        run_id = db.start_run(run_date=date.today())
+        logger.info(f"Run ID: {run_id}")
+
+        metrics = {
+            "total_shipments_read": 0,
             "new_shipments": 0,
             "shipments_checked": 0,
             "shipments_updated": 0,
@@ -1508,93 +104,567 @@ async def admin_test_flow(tenant_number: int = None):
             "reports_sent": 0,
             "alerts_sent": 0,
         }
-        test_errors = []
+        errors = []
 
-        await _process_tenant(
-            tenant_id=target_tid,
-            tenant_name=tenant_name,
-            whatsapp_numbers=whatsapp_numbers,
-            reserves=reserves,
-            modules=modules,
-            stats=test_stats,
-            errors=test_errors,
-            total_active_packages=active_pkgs,
-        )
+        # ── STEP 1: Read from DynamoDB ──
+        logger.info("STEP 1: Reading from DynamoDB...")
+        try:
+            dynamo = DynamoReader(
+                aws_access_key=config.AWS_ACCESS_KEY_ID,
+                aws_secret_key=config.AWS_SECRET_ACCESS_KEY,
+                region=config.AWS_REGION,
+                table_name=config.DYNAMO_TABLE_RESERVES,
+            )
+            reserves = dynamo.scan_all_reserves()
+            tracking_list = dynamo.extract_all_tracking_numbers(reserves)
+            metrics["total_shipments_read"] = len(tracking_list)
+            logger.info(f"Read {len(tracking_list)} tracking numbers from {len(reserves)} reserves")
+        except Exception as e:
+            logger.error(f"STEP 1 FAILED: {e}")
+            errors.append({"step": "dynamo_read", "error": str(e)})
+            if db and run_id:
+                db.complete_run(run_id, "failed", metrics, errors)
+            _send_failure_alert(f"Error leyendo DynamoDB: {e}")
+            return
 
-        return {
-            "status": "completed",
-            "tenant_processed": target_tid,
-            "tenant_name": tenant_name,
-            "reserves_count": len(reserves),
-            "total_packages": total_pkgs,
-            "active_packages": active_pkgs,
-            "whatsapp_numbers": whatsapp_numbers,
-            "stats": test_stats,
-            "errors": test_errors,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # ── STEP 2: Sync tracking numbers to PostgreSQL ──
+        logger.info("STEP 2: Syncing to PostgreSQL...")
+        tenant_mapping = db.get_tenant_mapping()
+        new_count = 0
+
+        for item in tracking_list:
+            tenant_id = item.get("tenant")
+
+            # Get client info from tenant mapping
+            if tenant_id not in tenant_mapping:
+                unmapped_tenants.add(tenant_id)
+                logger.warning(f"Tenant {tenant_id} not found in mapping, using fallback")
+                client_info = {
+                    "id": None,
+                    "name": f"Unmapped-Tenant-{tenant_id}",
+                    "odoo_company_id": None,
+                }
+            else:
+                client_info = tenant_mapping[tenant_id]
+
+            shipment_data = {
+                "tracking_number": item["tracking_number"],
+                "client_id": client_info.get("id"),
+                "client_name_raw": client_info.get("name", f"Tenant-{tenant_id}"),
+                "dynamo_data": json.dumps({
+                    "reserve_id": item.get("reserve_id"),
+                    "order_id": item.get("order_id"),
+                    "package_id": item.get("package_id"),
+                    "dynamo_status": item.get("dynamo_status"),
+                    "tenant": tenant_id,
+                }),
+            }
+
+            was_new = db.upsert_shipment(shipment_data)
+            if was_new:
+                new_count += 1
+
+        metrics["new_shipments"] = new_count
+        logger.info(f"Synced {len(tracking_list)} shipments ({new_count} new)")
+
+        # Alert admin about unmapped tenants
+        if unmapped_tenants:
+            unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
+            alert_msg = f"⚠️ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
+                try:
+                    whatsapp = WhatsAppSender(
+                        agent_url=config.SONIA_AGENT_URL,
+                        api_key=config.SONIA_AGENT_API_KEY,
+                    )
+                    whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert_msg)
+                    metrics["alerts_sent"] += 1
+                except Exception as e:
+                    logger.error(f"Failed to send unmapped tenants alert: {e}")
+
+        # ── STEP 3: Query FedEx for undelivered shipments ──
+        logger.info("STEP 3: Querying FedEx API...")
+        undelivered = db.get_undelivered_shipments()
+        logger.info(f"Found {len(undelivered)} undelivered shipments to check")
+
+        if undelivered:
+            try:
+                fedex = FedExTracker(
+                    client_id=config.FEDEX_API_KEY,
+                    client_secret=config.FEDEX_SECRET_KEY,
+                    account_number=config.FEDEX_ACCOUNT,
+                    sandbox=False,
+                )
+
+                if not fedex.authenticate():
+                    raise RuntimeError("FedEx authentication failed")
+
+                # Process in batches
+                batch_size = config.FEDEX_BATCH_SIZE
+                updated_count = 0
+                delivered_count = 0
+
+                for i in range(0, len(undelivered), batch_size):
+                    batch = undelivered[i:i + batch_size]
+                    tracking_numbers = [s["tracking_number"] for s in batch]
+
+                    results = fedex.track_batch(tracking_unumbers)
+
+                    for tn, result in results.items():
+                        if result and not result.get("error"):
+                            # Get the shipment to access all fields
+                            shipment = next((s for s in batch if s["tracking_number"] == tn), None)
+                            if shipment:
+                                # Normalize status
+                                sonia_status = get_sonia_status(
+                                    result.get("status", "unknown"),
+                                    result.get("status_detail", "")
+                                )
+
+                                # Extract delivery date and estimated delivery date
+                                delivery_date = None
+                                estimated_delivery_date = None
+
+                                if result.get("latest_event"):
+                                    event_date = result["latest_event"].get("date")
+                                    if event_date and sonia_status == "delivered":
+                                        delivery_date = event_date
+
+                                if result.get("estimated_delivery"):
+                                    estimated_delivery_date = result["estimated_delivery"]
+
+                                # Extract destination info from latest event
+                                destination_city = None
+                                destination_state = None
+                                destination_country = None
+
+                                if result.get("latest_event"):
+                                    loc = result["latest_event"].get("location", {})
+                                    destination_city = loc.get("city")
+                                    destination_state = loc.get("state")
+                                    destination_country = loc.get("country")
+
+                                update_data = {
+                                    "tracking_number": tn,
+                                    "sonia_status": sonia_status,
+                                    "fedex_status": result.get("status_detail", ""),
+                                    "fedex_status_code": result.get("status"),
+                                    "delivery_date": delivery_date,
+                                    "estimated_delivery_date": estimated_delivery_date,
+                                    "destination_city": destination_city,
+                                    "destination_state": destination_state,
+                                    "destination_country": destination_country,
+                                    "is_delivered": sonia_status == "delivered",
+                                    "last_fedex_check": datetime.now(COT),
+                                    "raw_fedex_response": json.dumps(result.get("raw_response", {})),
+                                }
+
+                                db.update_shipment_fedex_data(tn, update_data)
+                                updated_count += 1
+
+                                if sonia_status == "delivered":
+                                    delivered_count += 1
+
+                      # Respect rate limits
+                    import time
+                    if i + batch_size < len(undelivered):
+                        time.sleep(config.FEDEX_BATCHA~DELAY)
+
+                metrics["shipments_checked"] = len(undelivered)
+                metrics["shipments_updated"] = updated_count
+                metrics["shipments_delivered"] = delivered_count
+                logger.info(f"FedEx check complete: {updated_count} updated, {delivered_count} newly delivered")
+
+            except Exception as e:
+                logger.error(f"STEP 3 ERROR: {e}")
+                errors.append({"step": "fedex_check", "error": str(e)})
+�Y[��YH�Y[��[��˙�]
+�Y�B��Y[�ۘ[YHH�Y[��[��˙�]
+��[YH���[�[�^�[�[��YH�B�������\[�W�YH�Y[��[��˙�]
+�������\[�W�Y�B����]�\Y[���܈\��Y[��Y��Y[��Y���\Y[��H���]�[��\Y[��ٛܗܙ\ܝ
+�Y[��Y
+B��Y����\Y[�΂��۝[�YB����[�\�]H�\ܝ��\ܝ�^H�\ܝ��[���[�\�]W��Y[�ܙ\ܝ
+�Y[�ۘ[YK�\Y[��B�Y]�X��Ȝ�\ܝ���[�\�]Y�H
+�HB����]�۝X�����H���Y��H]�H������\[�W�Y�Y�������\[�W�Y���N���۝X��H��˙�]��۝X��ٛܗ���\[�J������\[�W�Y
+B���܈�۝X�[��۝X�΂�ۙHH�۝X���]
+��]�\�B�Y�ۙN���X��\��H�]�\��[�ܙ\ܝ��[��ۙK�\ܝ�^�Y[�ۘ[YJB�Y��X��\�΂�Y]�X��Ȝ�\ܝ���[��H
+�HB�^�\^�\[ۈ\�N�����\��\��܊��\��܈�][������۝X���܈��\[�H�������\[�W�YN��_H�B�\��ܜ˘\[�
+Ȝ�\��������۝X�ȋ�\��܈����J_JB���8� 8� �T���[�[\��8� 8� ����\��[�����T���[�[��YZ[�[\�ˋ���B�Y�\��ܜ΂�[\���H����;�#�
+��S��S��TԕHPT�Sʈ8�dx�dx�dx�dx�dW�����܈\��܈[�\��ܜ΂�[\���
+�H��<'e : "{error['paste']} - {error['error']}\n"
+            alert_ts += f"\nL━gistro附Report:\nI d ::% correct agode
+            if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
+                try:
+                    whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert_ts)
+                    metrics["alerts_sent"] += 1
+                except Exception as e:
+                    logger.error(f"Failed to send error alert: {e}")
+
+        # ── FINAL: Complete run ──B         end_time = datetime.now(COT)
+        duration = end_time - start_time
+        logger.info(f"{'='*60}")
+        logger.info(f"DAILY FLOW COMPLETED: {end_time.strftime('%Y-%m-%d %H:%M:%S')} COT")
+        logger.info(f"Duration: {duration}")
+        logger.info(f"{"safety_chSKU_MAP_PATH):
+        with open(_SKU_MAP_PATH, "r") as f:
+            return json.load(f)
+    logger.warning(f"SKU map not found at {_SKU_MAP_PATH}")
+    return {}
 
 
-@app.post("/admin/seed-data")
-async def admin_seed_data():
-    """Seed initial BloomsPal client and tenant_mapping data."""
-    db = modules.get("db")
-    if not db:
-        raise HTTPException(status_code=503, detail="Database not available")
+# ============================================================================
+# WAREHOUSE ENDPOINTS
+# ============================================================================
+
+@app.get("/warehouse", response_class=HTMLResponse)
+async def warehouse_ui():
+    """Serve the warehouse processing UI."""
+    return WAREHOUSE_HTML
+
+
+@app.post("/api/process-warehouse")
+async def process_warehouse(file: UploadFile = File(...)):
+    """
+    Upload a warehouse Excel file, parse it, and return a preview.
+    Does NOT create orders yet — user must confirm.
+    """
+    # Validate file
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "Only Excel files (.xlsx) are supported")
 
     try:
-        db.connect()
+        # Save to temp file
+        content = await file.read()
+        file_hash = hashlib.md5(content).hexdigest()
 
-        # 1. Insert BloomsPal client
-        db.cursor.execute("""
-            INSERT INTO clients (name, dynamo_name, dynamo_tenant_id, is_active)
-            VALUES ('BloomsPal', 'BloomsPal', 1, TRUE)
-            ON CONFLICT DO NOTHING
-            RETURNING id
-        """)
-        result = db.cursor.fetchone()
-        client_id = result["id"] if result else None
+        tmp_dir = tempfile.mkdtemp(prefix="warehouse_")
+        tmp_path = os.path.join(tmp_dir, file.filename)
+        with open(tmp_path, "wb") as f:
+            f.write(content)
 
-        if not client_id:
-            db.cursor.execute("SELECT id FROM clients WHERE name = 'BloomsPal'")
-            result = db.cursor.fetchone()
-            client_id = result["id"] if result else None
+        # Parse
+        parser = WarehouseParser(tmp_path)
+        parsed = parser.parse()
 
-        # 2. Insert tenant_mapping
-        db.cursor.execute("""
-            INSERT INTO tenant_mapping (dynamo_tenant_id, client_id, tenant_name)
-            VALUES (1, %s, 'BloomsPal')
-            ON CONFLICT (dynamo_tenant_id) DO NOTHING
-            RETURNING *
-        """, (client_id,))
-        mapping = db.cursor.fetchone()
+        # Process
+        sku_map = _load_sku_map()
+        processor = WarehouseProcessor(sku_map=sku_map)
+        preview = processor.process(parsed)
 
-        # 3. Insert contacts
-        contacts = [
-            ("Johan", "573142285386"),
-            ("Danny", "573105870328"),
-            ("Carlos", "573108507879"),
-        ]
-        for name, phone in contacts:
-            db.cursor.execute("""
-                INSERT INTO client_contacts (client_id, name, whatsapp_number, is_active)
-                VALUES (%s, %s, %s, TRUE)
-                ON CONFLICT DO NOTHING
-            """, (client_id, name, phone))
+        # Generate token and store preview
+        token = str(uuid.uuid4())
+        _warehouse_previews[token] = {
+            "filename": file.filename,
+            "file_hash": file_hash,
+            "created_at": datetime.now(COT).isoformat(),
+            "preview": preview,
+        }
 
-        db.conn.commit()
-        db.close()
+        # Clean up temp file
+        os.unlink(tmp_path)
+        os.rmdir(tmp_dir)
+
+        # Build response summary
+        summary = {}
+        for brand, data in preview.items():
+            summary[brand] = {
+                "partner_name": data["partner_name"],
+                "partner_id": data["partner_id"],
+                "unique_orders": data["unique_orders"],
+                "total_boxes": data["total_boxes"],
+                "boxes_detail": {k: v["count"] for k, v in data["boxes_detail"].items()},
+                "total_weight_raw": data["total_weight_raw"],
+                "total_weight_billed": data["total_weight_billed"],
+                "freight_cost": data["freight_cost"],
+                "address_fee": data["address_fee"],
+                "total_logistics": data["total_logistics"],
+                "total_skus_sold": data["total_skus_sold"],
+                "unmapped_skus": data["unmapped_skus"],
+            }
 
         return {
-            "status": "success",
-            "client_id": client_id,
-            "tenant_mapping_id": mapping["id"] if mapping else "already existed",
-            "contacts_added": len(contacts),
-            "whatsapp_numbers": ['573142285386', '573105870328', '573108507879']
+            "status": "preview",
+            "filename": file.filename,
+            "token": token,
+            "brands": summary,
         }
+
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
-        if db.conn:
-            db.conn.rollback()
-        db.close()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error processing warehouse file: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Error processing file: {e}")
+
+
+@app.post("/api/warehouse/confirm")
+async def confirm_warehouse(token: str):
+    """
+    Confirm a preview and create draft sale orders in Odoo.
+    """
+    if token not in _warehouse_previews:
+        raise HTTPException(404, "Preview not found or expired. Please upload the file again.")
+
+    stored = _warehouse_previews[token]
+    preview = stored["preview"]
+
+    try:
+        # Connect to Odoo
+        creator = OdooSaleOrderCreator(
+            url=config.ODOO_URL,
+            db=config.ODOO_DB,
+            username=config.ODOO_USERNAME,
+            password=config.ODOO_PASSWORD,
+        )
+
+        if not        th { background: #f8f9fa; font-weight: 600; color: #555; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-error { background: #f8d7da; color: #721c24; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #ccc; border-top-color: #4a90d9; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none; }
+        .loading-text { color: #666; margin-left: 8px; }
+        .brand-section { margin-bottom: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; }
+        .brand-name { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+        .brand-partner { font-size: 12px; color: #888; margin-bottom: 12px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .metric { background: white; padding: 10px; border-radius: 6px; text-align: center; }
+        .metric-value { font-size: 20px; font-weight: 700; color: #4a90d9; }
+        .metric-label { font-size: 11px; color: #888; margin-top: 2px; }
+        .total-row { font-weight: 700; background: #e8f4fd; }
+        .actions { display: flex; gap: 12px; margin-top: 20px; justify-content: center; }
+        .result-link { color: #4a90d9; text-decoration: none; }
+        .result-link:hover { text-decoration: underline; }
+        .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
+        .alert-error { background: #f8d7da; color: #721c24; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .logo { font-size: 14px; color: #999; text-align: center; margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SonIA — Warehouse Processor</h1>
+        <p class="subtitle">Sube el archivo Excel del warehouse para crear ordenes de venta en Odoo</p>
+
+        <!-- Upload Section -->
+        <div id="uploadSection" class="card">
+            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div class="icon">&#128230;</div>
+                <p><strong>Click o arrastra el archivo Excel aqui</strong></p>
+                <p>Solo archivos .xlsx</p>
+                <input type="file" id="fileInput" accept=".xlsx,.xls">
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingSection" class="card hidden">
+            <div class="text-center">
+                <div class="spinner"></div>
+                <span class="loading-text" id="loadingText">Procesando archivo...</span>
+            </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div id="previewSection" class="hidden">
+            <div class="card">
+                <h2 style="margin-bottom:4px;">Preview</h2>
+                <p class="subtitle" id="previewFilename"></p>
+                <div id="previewContent"></div>
+                <div class="actions">
+                    <button class="btn btn-primary" id="confirmBtn" onclick="confirmOrders()">
+                        Crear Ordenes en Odoo
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetUI()">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <div class="card">
+                <h2 style="margin-bottom:12px;">Ordenes Creadas</h2>
+                <div id="resultsContent"></div>
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="resetUI()">
+                        Procesar Otro Archivo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <p class="logo">SonIA Core &mdash; BloomsPal</p>
+    </div>
+
+    <script>
+        let currentToken = null;
+
+        // Drag & drop
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+        });
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            if (e.target.files.length) uploadFile(e.target.files[0]);
+        });
+
+        async function uploadFile(file) {
+            if (!file.name.match(/\\.xlsx?$/i)) {
+                alert('Solo archivos Excel (.xlsx)');
+                return;
+            }
+
+            show('loadingSection');
+            hide('uploadSection');
+            hide('previewSection');
+            hide('resultsSection');
+            document.getElementById('loadingText').textContent = 'Procesando archivo...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/process-warehouse', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Error procesando archivo');
+                }
+
+                currentToken = data.token;
+                renderPreview(data);
+                hide('loadingSection');
+                show('previewSection');
+            } catch (err) {
+                hide('loadingSection');
+                show('uploadSection');
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function renderPreview(data) {
+            document.getElementById('previewFilename').textContent = data.filename;
+            let html = '';
+
+            for (const [brand, info] of Object.entries(data.brands)) {
+                html += '<div class="brand-section">';
+                html += '<div class="brand-name">' + brand + '</div>';
+                html += '<div class="brand-partner">Partner: ' + info.partner_name + ' (ID: ' + info.partner_id + ')</div>';
+
+                html += '<div class="metrics-grid">';
+                html += metric(info.unique_orders, 'Ordenes');
+                html += metric(info.total_boxes, 'Cajas');
+                html += metric(info.total_skus_sold, 'SKUs');
+                html += metric(info.total_weight_raw + ' kg', 'Peso Real');
+                html += metric(info.total_weight_billed + ' kg', 'Peso Facturado');
+                html += metric('$' + info.freight_cost.toFixed(2), 'Flete');
+                html += metric('$' + info.address_fee.toFixed(2), 'Address Fee');
+                html += metric('$' + info.total_logistics.toFixed(2), 'Total');
+                html += '</div>';
+
+                // Boxes detail
+                if (Object.keys(info.boxes_detail).length > 0) {
+                    html += '<table><tr><th>Tipo Caja</th><th class="text-right">Cantidad</th></tr>';
+                    for (const [box, count] of Object.entries(info.boxes_detail)) {
+                        html += '<tr><td>' + box + '</td><td class="text-right">' + count + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                if (info.unmapped_skus && info.unmapped_skus.length > 0) {
+                    html += '<div class="alert alert-error">SKUs no mapeados: ' + info.unmapped_skus.join(', ') + '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            document.getElementById('previewContent').innerHTML = html;
+        }
+
+        function metric(value, label) {
+            return '<div class="metric"><div class="metric-value">' + value + '</div><div class="metric-label">' + label + '</div></div>';
+        }
+
+        async function confirmOrders() {
+            if (!currentToken) return;
+            if (!confirm('Confirmar creacion de ordenes de venta en Odoo?')) return;
+
+            const btn = document.getElementById('confirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creando...';
+
+            show('loadingSection');
+            document.getElementById('loadingText').textContent = 'Creando ordenes en Odoo...';
+
+            try {
+                const res = await fetch('/api/warehouse/confirm?token=' + encodeURIComponent(currentToken), {
+                    method: 'POST',
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Error creando ordenes');
+
+                renderResults(data);
+                hide('loadingSection');
+                hide('previewSection');
+                show('resultsSection');
+            } catch (err) {
+                hide('loadingSection');
+                btn.disabled = false;
+                btn.textContent = 'Crear Ordenes en Odoo';
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function renderResults(data) {
+            let html = '<p style="margin-bottom:12px">Archivo: <strong>' + data.filename + '</strong></p>';
+            html += '<table><tr><th>Dropshipper</th><th>Orden</th><th class="text-right">Total</th><th>Estado</th><th>Link</th></tr>';
+
+            for (const [brand, info] of Object.entries(data.orders)) {
+                html += '<tr>';
+                html += '<td>' + brand + '</td>';
+                if (info.status === 'created') {
+                    html += '<td>' + info.order_name + '</td>';
+                    html += '<td class="text-right">$' + info.amount_total.toFixed(2) + '</td>';
+                    html += '<td><span class="badge badge-success">Draft</span></td>';
+                    html += '<td><a class="result-link" href="' + info.url + '" target="_blank">Ver en Odoo</a></td>';
+                } else {
+                    html += '<td colspan="3"><span class="badge badge-error">Error: ' + info.error + '</span></td>';
+                    html += '<td></td>';
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            document.getElementById('resultsContent').innerHTML = html;
+        }
+
+        function show(id) { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id) { document.getElementById(id).classList.add('hidden'); }
+        function resetUI() {
+            currentToken = null;
+            hide('previewSection');
+            hide('resultsSection');
+            hide('loadingSection');
+            show('uploadSection');
+            document.getElementById('fileInput').value = '';
+        }
+    </script>
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
