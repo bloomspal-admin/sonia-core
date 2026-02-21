@@ -83,9 +83,11 @@ class OdooSaleOrderCreator:
             odoo_lines.append((0, 0, line_vals))
 
         # Create the sale order
+        # Warehouse orders are always created by Jenifer Parra (UID 10)
         order_vals = {
             "partner_id": partner_id,
             "order_line": odoo_lines,
+            "user_id": 10,  # jeniferparra@bloomspal.com
         }
 
         order_id = self._call("sale.order", "create", [order_vals])
