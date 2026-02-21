@@ -244,6 +244,7 @@ class WarehouseProcessor:
                 "unmapped_skus": unmapped_skus,
                 "order_lines": order_lines,
                 "tracking_numbers": data.get("tracking_numbers", []),
+                "dispatch_date": data.get("dispatch_date"),
             }
 
             logger.info(
