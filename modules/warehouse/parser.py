@@ -64,7 +64,7 @@ class WarehouseParser:
         result = {}
 
         for brand in brands:
-            pack_list_sheet = f"{brand} - PACH LIST"
+            pack_list_sheet = f"{brand} - PACK LIST"
             brand_data = {
                 "unique_orders": 0,
                 "boxes": {},
@@ -153,7 +153,7 @@ class WarehouseParser:
             col_i = str(vals[8] or "").strip() if len(vals) > 8 else ""  # AWB
 
             # New order starts when col A has an order number
-            if col_a and col_a.startswith("#":
+            if col_a and col_a.startswith("#"):
                 current_order = col_a
                 orders.add(current_order)
 
@@ -165,7 +165,7 @@ class WarehouseParser:
                 if col_i and col_i not in ("", "AWB"):
                     tracking_numbers.append(col_i)
 
-            elif "TOTAL CAJAS: " in col_c.upper():
+            elif "TOTAL CAJAS:" in col_c.upper():
                 # End of order block — skip
                 continue
 
