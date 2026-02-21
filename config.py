@@ -38,7 +38,7 @@ FEDEX_BASE_URL = os.getenv("FEDEX_BASE_URL", "https://apis.fedex.com")
 # ============================================================================
 ODOO_URL = os.getenv("ODOO_URL", "")
 ODOO_DB = os.getenv("ODOO_DB", "")
-ODOO_USERNAME = os.getenv("ODOO_USERNAME", "")
+ODOO_USERNAME = os.getenv("ODOO_USER", "")
 ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "")
 
 # ============================================================================
