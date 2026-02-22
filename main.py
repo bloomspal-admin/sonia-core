@@ -1034,8 +1034,10 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 html += metric(info.total_weight_billed + ' kg', 'Peso Facturado');
                 html += metric('$' + info.freight_cost.toFixed(2), 'Flete');
                 html += metric('$' + info.address_fee.toFixed(2), 'Address Fee');
-                html += metric('
-
+                html += metric('$' + info.total_logistics.toFixed(2), 'Total');
+                var costPerKg = info.total_weight_raw > 0 ? (info.total_logistics / info.total_weight_raw).toFixed(2) : '0.00';
+                html += metric('$' + costPerKg, 'Costo/Kg');
+                html += '</div>';
                 // Boxes detail
                 if (Object.keys(info.boxes_detail).length > 0) {
                     html += '<table><tr><th>Tipo Caja</th><th class="text-right">Cantidad</th></tr>';
