@@ -1,8 +1,8 @@
 """
-âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-â                    SonIA Core â Daily Tracking Orchestrator                    â
-â                              BloomsPal                                        â
-âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Ã¢ÂÂ                    SonIA Core Ã¢ÂÂ Daily Tracking Orchestrator                    Ã¢ÂÂ
+Ã¢ÂÂ                              BloomsPal                                        Ã¢ÂÂ
+Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 
 Automated daily flow:
 1. Read tracking numbers from DynamoDB (READ ONLY)
@@ -90,7 +90,7 @@ def run_daily_flow(manual: bool = False):
     unmapped_tenants = set()
 
     try:
-        # ââ Initialize Database ââ
+        # Ã¢ÂÂÃ¢ÂÂ Initialize Database Ã¢ÂÂÃ¢ÂÂ
         db = DBManager(config.DATABASE_URL)
         db.connect()
         run_id = db.start_run(run_date=date.today())
@@ -109,7 +109,7 @@ def run_daily_flow(manual: bool = False):
         }
         errors = []
 
-        # ââ STEP 1: Read from DynamoDB ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 1: Read from DynamoDB Ã¢ÂÂÃ¢ÂÂ
         logger.info("STEP 1: Reading from DynamoDB...")
         try:
             dynamo = DynamoReader(
@@ -130,7 +130,7 @@ def run_daily_flow(manual: bool = False):
             _send_failure_alert(f"Error leyendo DynamoDB: {e}")
             return
 
-        # ââ STEP 2: Sync tracking numbers to PostgreSQL ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 2: Sync tracking numbers to PostgreSQL Ã¢ÂÂÃ¢ÂÂ
         logger.info("STEP 2: Syncing to PostgreSQL...")
         tenant_mapping = db.get_tenant_mapping()
         new_count = 0
@@ -173,7 +173,7 @@ def run_daily_flow(manual: bool = False):
         # Alert admin about unmapped tenants
         if unmapped_tenants:
             unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
-            alert_msg = f"â ï¸ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            alert_msg = f"Ã¢ÂÂ Ã¯Â¸Â *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
             if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
                 try:
                     whatsapp = WhatsAppSender(
@@ -185,7 +185,7 @@ def run_daily_flow(manual: bool = False):
                 except Exception as e:
                     logger.error(f"Failed to send unmapped tenants alert: {e}")
 
-        # ââ STEP 3: Query FedEx for undelivered shipments ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 3: Query FedEx for undelivered shipments Ã¢ÂÂÃ¢ÂÂ
         logger.info("STEP 3: Querying FedEx API...")
         undelivered = db.get_undelivered_shipments()
         logger.info(f"Found {len(undelivered)} undelivered shipments to check")
@@ -282,7 +282,7 @@ def run_daily_flow(manual: bool = False):
                 logger.error(f"STEP 3 ERROR: {e}")
                 errors.append({"step": "fedex_check", "error": str(e)})
 
-        # ââ STEP 4: Detect anomalies (Part C) ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 4: Detect anomalies (Part C) Ã¢ÂÂÃ¢ÂÂ
         logger.info("STEP 4: Detecting anomalies...")
         try:
             detector = AnomalyDetector(thresholds={
@@ -324,7 +324,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 4 ERROR: {e}")
             errors.append({"step": "anomaly_detection", "error": str(e)})
 
-        # ââ STEP 5: Query Odoo and send reports ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 5: Query Odoo and send reports Ã¢ÂÂÃ¢ÂÂ
         logger.info("STEP 5: Querying Odoo and sending reports...")
         try:
             odoo = OdooClient(
@@ -392,7 +392,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 5 ERROR: {e}")
             errors.append({"step": "reports_and_whatsapp", "error": str(e)})
 
-        # ââ STEP 6: Complete run ââ
+        # Ã¢ÂÂÃ¢ÂÂ STEP 6: Complete run Ã¢ÂÂÃ¢ÂÂ
         status = "success" if not errors else "partial"
         db.complete_run(run_id, status, metrics, errors)
 
@@ -408,7 +408,7 @@ def run_daily_flow(manual: bool = False):
         logger.critical(f"CRITICAL ERROR in daily flow: {e}")
         import traceback
         traceback.print_exc()
-        _send_failure_alert(f"Error crÃ­tico en flujo diario: {e}")
+        _send_failure_alert(f"Error crÃÂ­tico en flujo diario: {e}")
         if db and run_id:
             try:
                 db.complete_run(run_id, "failed", {}, [{"step": "critical", "error": str(e)}])
@@ -460,7 +460,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SonIA Core â BloomsPal",
+    title="SonIA Core Ã¢ÂÂ BloomsPal",
     description="Daily tracking orchestrator",
     lifespan=lifespan,
 )
@@ -532,7 +532,7 @@ async def get_status():
 
 
 # ============================================================================
-# WAREHOUSE PROCESSING â In-memory preview store
+# WAREHOUSE PROCESSING Ã¢ÂÂ In-memory preview store
 # ============================================================================
 
 _warehouse_previews: Dict[str, dict] = {}
@@ -566,14 +566,14 @@ def _check_duplicate_awbs(all_awbs: list) -> dict:
         return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
     except Exception as e:
         logger.warning(f"Could not check duplicate AWBs: {e}")
-        return {"has_duplicates": False, "duplicates": []}  # token â preview data
+        return {"has_duplicates": False, "duplicates": []}  # token Ã¢ÂÂ preview data
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
 
 
 def _load_sku_map() -> dict:
-    """Load SKUâproduct ID mapping."""
+    """Load SKUÃ¢ÂÂproduct ID mapping."""
     if os.path.exists(_SKU_MAP_PATH):
         with open(_SKU_MAP_PATH, "r") as f:
             return json.load(f)
@@ -595,7 +595,7 @@ async def warehouse_ui():
 async def process_warehouse(file: UploadFile = File(...)):
     """
     Upload a warehouse Excel file, parse it, and return a preview.
-    Does NOT create orders yet â user must confirm.
+    Does NOT create orders yet Ã¢ÂÂ user must confirm.
     """
     # Validate file
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
@@ -656,6 +656,7 @@ async def process_warehouse(file: UploadFile = File(...)):
                 "address_fee": data["address_fee"],
                 "total_logistics": data["total_logistics"],
                 "total_skus_sold": data["total_skus_sold"],
+                "skus": {k: {"qty": v["qty"], "product_id": v.get("product_id")} for k, v in data.get("skus", {}).items()},
                 "unmapped_skus": data["unmapped_skus"],
                 "dispatch_date": str(data.get("dispatch_date", "")) if data.get("dispatch_date") else None,
             }
@@ -729,7 +730,7 @@ async def confirm_warehouse(token: str):
                 }
 
 
-        # ── Save billing data to PostgreSQL ──────────────────────
+        # ââ Save billing data to PostgreSQL ââââââââââââââââââââââ
         try:
             billing_conn = psycopg2.connect(config.DATABASE_URL)
             billing_cur = billing_conn.cursor()
@@ -835,7 +836,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SonIA â Warehouse Processor</title>
+    <title>SonIA Ã¢ÂÂ Warehouse Processor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
@@ -888,7 +889,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>SonIA â Warehouse Processor</h1>
+        <h1>SonIA Ã¢ÂÂ Warehouse Processor</h1>
         <p class="subtitle">Sube el archivo Excel del warehouse para crear ordenes de venta en Odoo</p>
 
         <!-- Upload Section -->
@@ -1045,7 +1046,22 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                     html += '</table>';
                 }
 
-                if (info.unmapped_skus && info.unmapped_skus.length > 0) {
+                // SKU detail table
+                if (info.skus && Object.keys(info.skus).length > 0) {
+                    html += '<h4 style="margin:12px 0 6px;font-size:0.95em;color:#555;">Detalle SKUs</h4>';
+                    html += '<table><tr><th>SKU Code</th><th class="text-right">Cantidad</th></tr>';
+                    var skuEntries = Object.entries(info.skus);
+                    skuEntries.sort(function(a,b){ return b[1].qty - a[1].qty; });
+                    for (var si = 0; si < skuEntries.length; si++) {
+                        var skuCode = skuEntries[si][0];
+                        var skuInfo = skuEntries[si][1];
+                        var rowClass = skuInfo.product_id ? '' : ' style="color:#c0392b;font-weight:bold;"';
+                        html += '<tr' + rowClass + '><td>' + skuCode + '</td><td class="text-right">' + skuInfo.qty + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                                if (info.unmapped_skus && info.unmapped_skus.length > 0) {
                     html += '<div class="alert alert-error">SKUs no mapeados: ' + info.unmapped_skus.join(', ') + '</div>';
                 }
 
