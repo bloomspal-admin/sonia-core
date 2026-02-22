@@ -96,7 +96,7 @@ class OdooSaleOrderCreator:
             date_str = str(dispatch_date)
             order_vals["client_order_ref"] = f"Warehouse {date_str}"
             # Internal note posted via message_post after order creation
-            order_vals["commitment_date"] = f"{date_str} 12:00:00"
+            order_vals["commitment_date"] = f"{date_str} 05:00:00"
 
         order_id = self._call("sale.order", "create", [order_vals])
 
