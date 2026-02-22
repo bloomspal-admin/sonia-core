@@ -95,13 +95,21 @@ class OdooSaleOrderCreator:
         if dispatch_date:
             date_str = str(dispatch_date)
             order_vals["client_order_ref"] = f"Warehouse {date_str}"
-            order_vals["note"] = f"Fecha de corte warehouse: {date_str}"
-            order_vals["commitment_date"] = date_str
+            # Internal note posted via message_post after order creation
+            order_vals["commitment_date"] = f"{date_str} 12:00:00"
 
         order_id = self._call("sale.order", "create", [order_vals])
 
         if not order_id:
             raise RuntimeError(f"Failed to create sale order for partner {partner_id}")
+
+        # Post fecha de corte as internal note in chatter
+        if dispatch_date:
+            self._call("sale.order", "message_post", [order_id], {
+                "body": f"Fecha de corte warehouse: {str(dispatch_date)}",
+                "message_type": "comment",
+                "subtype_xmlid": "mail.mt_note",
+            })
 
         # Read back the created order
         order_data = self._call(
