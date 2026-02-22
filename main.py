@@ -1034,7 +1034,267 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 html += metric(info.total_weight_billed + ' kg', 'Peso Facturado');
                 html += metric('$' + info.freight_cost.toFixed(2), 'Flete');
                 html += metric('$' + info.address_fee.toFixed(2), 'Address Fee');
-                html += metric('$' + info.total_logistics.toFixed(2), 'Total');
+                html += metric('
+
+                // Boxes detail
+                if (Object.keys(info.boxes_detail).length > 0) {
+                    html += '<table><tr><th>Tipo Caja</th><th class="text-right">Cantidad</th></tr>';
+                    for (const [box, count] of Object.entries(info.boxes_detail)) {
+                        html += '<tr><td>' + box + '</td><td class="text-right">' + count + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                // SKU detail table
+                if (info.skus && Object.keys(info.skus).length > 0) {
+                    html += '<h4 style="margin:12px 0 6px;font-size:0.95em;color:#555;">Detalle SKUs</h4>';
+                    html += '<table><tr><th>SKU Code</th><th class="text-right">Cantidad</th></tr>';
+                    var skuEntries = Object.entries(info.skus);
+                    skuEntries.sort(function(a,b){ return b[1].qty - a[1].qty; });
+                    for (var si = 0; si < skuEntries.length; si++) {
+                        var skuCode = skuEntries[si][0];
+                        var skuInfo = skuEntries[si][1];
+                        var rowClass = skuInfo.product_id ? '' : ' style="color:#c0392b;font-weight:bold;"';
+                        html += '<tr' + rowClass + '><td>' + skuCode + '</td><td class="text-right">' + skuInfo.qty + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                                if (info.unmapped_skus && info.unmapped_skus.length > 0) {
+                    html += '<div class="alert alert-error">SKUs no mapeados: ' + info.unmapped_skus.join(', ') + '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            document.getElementById('previewContent').innerHTML = html;
+        
+                // --- Duplicate AWB warning ---
+                const dupWarning = document.getElementById('duplicateWarning');
+                const dupList = document.getElementById('duplicateList');
+                if (data.has_duplicates && data.duplicates && data.duplicates.length > 0) {
+                    let dupHtml = '<table style="width:100%; font-size:0.85em; border-collapse:collapse;">';
+                    dupHtml += '<tr style="background:#ffc107;color:#856404;"><th style="padding:4px 8px;">AWB</th><th style="padding:4px 8px;">Marca</th><th style="padding:4px 8px;">Fecha</th><th style="padding:4px 8px;">Archivo</th></tr>';
+                    data.duplicates.forEach(d => {
+                        dupHtml += '<tr style="border-bottom:1px solid #ffeeba;"><td style="padding:4px 8px;">' + d.awb + '</td><td style="padding:4px 8px;">' + d.brand_name + '</td><td style="padding:4px 8px;">' + (d.dispatch_date || '-') + '</td><td style="padding:4px 8px;">' + (d.source_filename || '-') + '</td></tr>';
+                    });
+                    dupHtml += '</table>';
+                    dupList.innerHTML = dupHtml;
+                    dupWarning.style.display = 'block';
+                } else {
+                    dupWarning.style.display = 'none';
+                }
+}
+
+        function metric(value, label) {
+            return '<div class="metric"><div class="metric-value">' + value + '</div><div class="metric-label">' + label + '</div></div>';
+        }
+
+        async function confirmOrders() {
+            if (!currentToken) return;
+            if (!confirm('Confirmar creacion de ordenes de venta en Odoo?')) return;
+
+            const btn = document.getElementById('confirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creando...';
+
+            show('loadingSection');
+            document.getElementById('loadingText').textContent = 'Creando ordenes en Odoo...';
+
+            try {
+                const res = await fetch('/api/warehouse/confirm?token=' + encodeURIComponent(currentToken), {
+                    method: 'POST',
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Error creando ordenes');
+
+                renderResults(data);
+                hide('loadingSection');
+                hide('previewSection');
+                show('resultsSection');
+            } catch (err) {
+                hide('loadingSection');
+                btn.disabled = false;
+                btn.textContent = 'Crear Ordenes en Odoo';
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function renderResults(data) {
+            let html = '<p style="margin-bottom:12px">Archivo: <strong>' + data.filename + '</strong></p>';
+            html += '<table><tr><th>Dropshipper</th><th>Orden</th><th class="text-right">Total</th><th>Estado</th><th>Link</th></tr>';
+
+            for (const [brand, info] of Object.entries(data.orders)) {
+                html += '<tr>';
+                html += '<td>' + brand + '</td>';
+                if (info.status === 'created') {
+                    html += '<td>' + info.order_name + '</td>';
+                    html += '<td class="text-right">$' + info.amount_total.toFixed(2) + '</td>';
+                    html += '<td><span class="badge badge-success">Draft</span></td>';
+                    html += '<td><a class="result-link" href="' + info.url + '" target="_blank">Ver en Odoo</a></td>';
+                } else {
+                    html += '<td colspan="3"><span class="badge badge-error">Error: ' + info.error + '</span></td>';
+                    html += '<td></td>';
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            document.getElementById('resultsContent').innerHTML = html;
+        }
+
+        function show(id) { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id) { document.getElementById(id).classList.add('hidden'); }
+        function resetUI() {
+            currentToken = null;
+            hide('previewSection');
+            hide('resultsSection');
+            hide('loadingSection');
+            show('uploadSection');
+            document.getElementById('fileInput').value = '';
+        }
+    </script>
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
+ + info.total_logistics.toFixed(2), 'Total');
+                var costPerKg = info.total_weight_raw > 0 ? (info.total_logistics / info.total_weight_raw).toFixed(2) : '0.00';
+                html += metric('
+
+                // Boxes detail
+                if (Object.keys(info.boxes_detail).length > 0) {
+                    html += '<table><tr><th>Tipo Caja</th><th class="text-right">Cantidad</th></tr>';
+                    for (const [box, count] of Object.entries(info.boxes_detail)) {
+                        html += '<tr><td>' + box + '</td><td class="text-right">' + count + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                // SKU detail table
+                if (info.skus && Object.keys(info.skus).length > 0) {
+                    html += '<h4 style="margin:12px 0 6px;font-size:0.95em;color:#555;">Detalle SKUs</h4>';
+                    html += '<table><tr><th>SKU Code</th><th class="text-right">Cantidad</th></tr>';
+                    var skuEntries = Object.entries(info.skus);
+                    skuEntries.sort(function(a,b){ return b[1].qty - a[1].qty; });
+                    for (var si = 0; si < skuEntries.length; si++) {
+                        var skuCode = skuEntries[si][0];
+                        var skuInfo = skuEntries[si][1];
+                        var rowClass = skuInfo.product_id ? '' : ' style="color:#c0392b;font-weight:bold;"';
+                        html += '<tr' + rowClass + '><td>' + skuCode + '</td><td class="text-right">' + skuInfo.qty + '</td></tr>';
+                    }
+                    html += '</table>';
+                }
+
+                                if (info.unmapped_skus && info.unmapped_skus.length > 0) {
+                    html += '<div class="alert alert-error">SKUs no mapeados: ' + info.unmapped_skus.join(', ') + '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            document.getElementById('previewContent').innerHTML = html;
+        
+                // --- Duplicate AWB warning ---
+                const dupWarning = document.getElementById('duplicateWarning');
+                const dupList = document.getElementById('duplicateList');
+                if (data.has_duplicates && data.duplicates && data.duplicates.length > 0) {
+                    let dupHtml = '<table style="width:100%; font-size:0.85em; border-collapse:collapse;">';
+                    dupHtml += '<tr style="background:#ffc107;color:#856404;"><th style="padding:4px 8px;">AWB</th><th style="padding:4px 8px;">Marca</th><th style="padding:4px 8px;">Fecha</th><th style="padding:4px 8px;">Archivo</th></tr>';
+                    data.duplicates.forEach(d => {
+                        dupHtml += '<tr style="border-bottom:1px solid #ffeeba;"><td style="padding:4px 8px;">' + d.awb + '</td><td style="padding:4px 8px;">' + d.brand_name + '</td><td style="padding:4px 8px;">' + (d.dispatch_date || '-') + '</td><td style="padding:4px 8px;">' + (d.source_filename || '-') + '</td></tr>';
+                    });
+                    dupHtml += '</table>';
+                    dupList.innerHTML = dupHtml;
+                    dupWarning.style.display = 'block';
+                } else {
+                    dupWarning.style.display = 'none';
+                }
+}
+
+        function metric(value, label) {
+            return '<div class="metric"><div class="metric-value">' + value + '</div><div class="metric-label">' + label + '</div></div>';
+        }
+
+        async function confirmOrders() {
+            if (!currentToken) return;
+            if (!confirm('Confirmar creacion de ordenes de venta en Odoo?')) return;
+
+            const btn = document.getElementById('confirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creando...';
+
+            show('loadingSection');
+            document.getElementById('loadingText').textContent = 'Creando ordenes en Odoo...';
+
+            try {
+                const res = await fetch('/api/warehouse/confirm?token=' + encodeURIComponent(currentToken), {
+                    method: 'POST',
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Error creando ordenes');
+
+                renderResults(data);
+                hide('loadingSection');
+                hide('previewSection');
+                show('resultsSection');
+            } catch (err) {
+                hide('loadingSection');
+                btn.disabled = false;
+                btn.textContent = 'Crear Ordenes en Odoo';
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function renderResults(data) {
+            let html = '<p style="margin-bottom:12px">Archivo: <strong>' + data.filename + '</strong></p>';
+            html += '<table><tr><th>Dropshipper</th><th>Orden</th><th class="text-right">Total</th><th>Estado</th><th>Link</th></tr>';
+
+            for (const [brand, info] of Object.entries(data.orders)) {
+                html += '<tr>';
+                html += '<td>' + brand + '</td>';
+                if (info.status === 'created') {
+                    html += '<td>' + info.order_name + '</td>';
+                    html += '<td class="text-right">$' + info.amount_total.toFixed(2) + '</td>';
+                    html += '<td><span class="badge badge-success">Draft</span></td>';
+                    html += '<td><a class="result-link" href="' + info.url + '" target="_blank">Ver en Odoo</a></td>';
+                } else {
+                    html += '<td colspan="3"><span class="badge badge-error">Error: ' + info.error + '</span></td>';
+                    html += '<td></td>';
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            document.getElementById('resultsContent').innerHTML = html;
+        }
+
+        function show(id) { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id) { document.getElementById(id).classList.add('hidden'); }
+        function resetUI() {
+            currentToken = null;
+            hide('previewSection');
+            hide('resultsSection');
+            hide('loadingSection');
+            show('uploadSection');
+            document.getElementById('fileInput').value = '';
+        }
+    </script>
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=config.PORT)
+ + costPerKg, 'Costo/Kg');
                 html += '</div>';
 
                 // Boxes detail
