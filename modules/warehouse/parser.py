@@ -1,5 +1,5 @@
 """
-SonIA Core — Warehouse Excel Parser
+SonIA Core â Warehouse Excel Parser
 Parses warehouse Excel files to extract data per dropshipper:
   - Unique orders, box types/counts, SKUs sold, tracking numbers.
 
@@ -40,7 +40,7 @@ class WarehouseParser:
             {
                 "Dios Mio Coffee": {
                     "unique_orders": 8,
-                    "boxes": {"CAJA PEQUEÑA": 5, "CAJA MEDIANA": 2},
+                    "boxes": {"CAJA PEQUEÃA": 5, "CAJA MEDIANA": 2},
                     "total_boxes": 7,
                     "skus": {"DMC12BMGS": 4, "DMC12BLGS": 2, ...},
                     "total_skus_sold": 12,
@@ -59,6 +59,10 @@ class WarehouseParser:
         logger.info(f"Brands identified: {brands}")
 
         if not brands:
+            # Fallback: try Hoja1 format (COOCENTRAL, DON MAIZ B2B, etc.)
+            if "Hoja1" in self.sheet_names:
+                logger.info("No PACK LIST tabs found, trying Hoja1 format")
+                return self._parse_hoja1()
             raise ValueError("No brand PACK LIST tabs found in warehouse file")
 
         result = {}
@@ -203,7 +207,7 @@ class WarehouseParser:
                     tracking_numbers.append(col_i)
 
             elif "TOTAL CAJAS:" in col_c.upper():
-                # End of order block — skip
+                # End of order block â skip
                 continue
 
             else:
@@ -228,7 +232,105 @@ class WarehouseParser:
         }
 
 
-    def _parse_picking_list(self) -> Dict[str, int]:
+    def _parse_hoja1(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse Hoja1-only format (COOCENTRAL, DON MAIZ B2B, etc.).
+
+        Structure:
+            Row 4: FECHA CREACION (may be empty)
+            Row 7: Header row (ORDEN #, Canal, DESTINATARIO, ZIPCODE, DIRECCION, CIUDAD, TELEFONO, TIPO CAJA, NOMBRE PRODUCTO, CANTIDAD UNIDADES)
+            Data rows: order blocks similar to PACK LIST
+            Rows with 'TOTAL CAJA:' in col D end order blocks.
+
+        Brand is inferred from the filename (folder name passed by the uploader).
+        Since we don't know the brand from Hoja1, we use a generic brand name
+        that the processor will try to resolve from the upload context.
+        """
+        ws = self.wb["Hoja1"]
+        orders = set()
+        boxes = {}
+        tracking_numbers = []
+        skus = {}
+        dispatch_date = None
+
+        # Extract FECHA CREACION from header rows
+        for r in ws.iter_rows(min_row=1, max_row=8, values_only=True):
+            str_vals = [str(v or "").strip() for v in r]
+            if str_vals and "FECHA" in str_vals[0].upper() and "CREACI" in str_vals[0].upper():
+                raw_val = r[1] if len(r) > 1 else None
+                if raw_val is not None:
+                    try:
+                        from datetime import datetime as _dt, date as _date
+                        if isinstance(raw_val, _dt):
+                            dispatch_date = raw_val.date()
+                        elif isinstance(raw_val, _date):
+                            dispatch_date = raw_val
+                        else:
+                            raw_date = str(raw_val).strip()
+                            for fmt in ("%d %b %Y", "%d %B %Y", "%Y-%m-%d", "%d/%m/%Y"):
+                                try:
+                                    dispatch_date = _dt.strptime(raw_date, fmt).date()
+                                    break
+                                except ValueError:
+                                    continue
+                    except Exception as e:
+                        logger.warning(f"Error parsing Hoja1 date: {e}")
+                break
+
+        # Find header row
+        header_row = None
+        for i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), 1):
+            col_a = str(row[0] or "").strip().upper() if row[0] else ""
+            if "ORDEN" in col_a:
+                header_row = i
+                break
+
+        if not header_row:
+            logger.warning("No header row found in Hoja1")
+            return {}
+
+        # Parse data rows
+        for row in ws.iter_rows(min_row=header_row + 1, values_only=True):
+            col_a = str(row[0] or "").strip() if row[0] else ""  # ORDEN #
+            col_d = str(row[3] or "").strip() if len(row) > 3 and row[3] else ""  # ZIPCODE or TOTAL CAJA
+            col_h = str(row[7] or "").strip() if len(row) > 7 and row[7] else ""  # TIPO CAJA
+            col_i = str(row[8] or "").strip() if len(row) > 8 and row[8] else ""  # NOMBRE PRODUCTO
+            col_j = row[9] if len(row) > 9 else None  # CANTIDAD UNIDADES
+
+            if "TOTAL CAJA" in col_d.upper():
+                continue
+
+            if col_a and col_a.startswith("#"):
+                orders.add(col_a)
+
+            if col_h and col_h.upper() not in ("", "TIPO CAJA"):
+                boxes[col_h] = boxes.get(col_h, 0) + 1
+
+            # Extract product as SKU (use product name since no SAP code in Hoja1)
+            if col_i and col_i.upper() not in ("", "NOMBRE PRODUCTO") and col_j is not None:
+                try:
+                    qty = int(col_j)
+                    skus[col_i] = skus.get(col_i, 0) + qty
+                except (ValueError, TypeError):
+                    pass
+
+        # Use "UNKNOWN" as brand - processor will resolve from upload context
+        brand_name = "UNKNOWN"
+        logger.info(f"  Hoja1 parsed: {len(orders)} orders, {sum(boxes.values())} boxes, {sum(skus.values())} SKUs")
+
+        return {
+            brand_name: {
+                "unique_orders": len(orders),
+                "boxes": boxes,
+                "total_boxes": sum(boxes.values()),
+                "skus": skus,
+                "total_skus_sold": sum(skus.values()),
+                "tracking_numbers": tracking_numbers,
+                "dispatch_date": dispatch_date,
+            }
+        }
+
+        def _parse_picking_list(self) -> Dict[str, int]:
         """
         Fallback: parse PICKING LIST tab to extract SKUs when PRODUCTS SOLD is missing.
 
