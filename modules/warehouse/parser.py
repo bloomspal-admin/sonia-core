@@ -1,5 +1,5 @@
 """
-SonIA Core â Warehouse Excel Parser
+SonIA Core Ã¢ÂÂ Warehouse Excel Parser
 Parses warehouse Excel files to extract data per dropshipper:
   - Unique orders, box types/counts, SKUs sold, tracking numbers.
 
@@ -40,7 +40,7 @@ class WarehouseParser:
             {
                 "Dios Mio Coffee": {
                     "unique_orders": 8,
-                    "boxes": {"CAJA PEQUEÃA": 5, "CAJA MEDIANA": 2},
+                    "boxes": {"CAJA PEQUEÃÂA": 5, "CAJA MEDIANA": 2},
                     "total_boxes": 7,
                     "skus": {"DMC12BMGS": 4, "DMC12BLGS": 2, ...},
                     "total_skus_sold": 12,
@@ -207,7 +207,7 @@ class WarehouseParser:
                     tracking_numbers.append(col_i)
 
             elif "TOTAL CAJAS:" in col_c.upper():
-                # End of order block â skip
+                # End of order block Ã¢ÂÂ skip
                 continue
 
             else:
@@ -330,110 +330,110 @@ class WarehouseParser:
             }
         }
 
-        def _parse_picking_list(self) -> Dict[str, int]:
-        """
-        Fallback: parse PICKING LIST tab to extract SKUs when PRODUCTS SOLD is missing.
+    def _parse_picking_list(self) -> Dict[str, int]:
+    """
+    Fallback: parse PICKING LIST tab to extract SKUs when PRODUCTS SOLD is missing.
 
-        Structure:
-            Header row has 'SAP TERC' in col A.
-            Data rows: SAP code in col A, quantity in col D.
-            Ends at row with 'TOTAL' or empty SAP.
-        """
-        ws = self.wb["PICKING LIST"]
-        skus = {}
-        in_data = False
+    Structure:
+        Header row has 'SAP TERC' in col A.
+        Data rows: SAP code in col A, quantity in col D.
+        Ends at row with 'TOTAL' or empty SAP.
+    """
+    ws = self.wb["PICKING LIST"]
+    skus = {}
+    in_data = False
 
-        for row in ws.iter_rows(min_row=1, values_only=True):
-            col_a = str(row[0] or "").strip() if row[0] is not None else ""
-            col_d = row[3] if len(row) > 3 else None
+    for row in ws.iter_rows(min_row=1, values_only=True):
+        col_a = str(row[0] or "").strip() if row[0] is not None else ""
+        col_d = row[3] if len(row) > 3 else None
 
-            if not in_data:
-                if "SAP" in col_a.upper():
-                    in_data = True
+        if not in_data:
+            if "SAP" in col_a.upper():
+                in_data = True
+                continue
+        else:
+            if not col_a or "TOTAL" in col_a.upper():
+                break
+            if col_d is not None:
+                try:
+                    qty = int(col_d)
+                    skus[col_a] = qty
+                except (ValueError, TypeError):
                     continue
-            else:
-                if not col_a or "TOTAL" in col_a.upper():
-                    break
-                if col_d is not None:
-                    try:
-                        qty = int(col_d)
-                        skus[col_a] = qty
-                    except (ValueError, TypeError):
-                        continue
 
-        logger.info(f"  Parsed PICKING LIST: {len(skus)} SKUs, total {sum(skus.values())} units")
-        return skus
+    logger.info(f"  Parsed PICKING LIST: {len(skus)} SKUs, total {sum(skus.values())} units")
+    return skus
 
     def _parse_products_sold_for_brand(self, brand: str) -> Dict[str, int]:
-        """
-        Parse the PRODUCTS SOLD tab for a specific brand.
+    """
+    Parse the PRODUCTS SOLD tab for a specific brand.
 
-        Structure:
-            Brand name appears alone in col A as a section header.
-            Next row is column headers: SKU, NOMBRE PRODUCTO, TIPO, CANTIDAD
-            Then data rows until a row with 'TOTAL:' in col C.
-        """
-        ws = self.wb["PRODUCTS SOLD"]
-        skus = {}
-        in_brand_section = False
-        expect_header = False
+    Structure:
+        Brand name appears alone in col A as a section header.
+        Next row is column headers: SKU, NOMBRE PRODUCTO, TIPO, CANTIDAD
+        Then data rows until a row with 'TOTAL:' in col C.
+    """
+    ws = self.wb["PRODUCTS SOLD"]
+    skus = {}
+    in_brand_section = False
+    expect_header = False
 
-        for row in ws.iter_rows(min_row=1, values_only=False):
-            vals = [c.value for c in row]
+    for row in ws.iter_rows(min_row=1, values_only=False):
+        vals = [c.value for c in row]
 
-            if not any(v is not None and str(v).strip() for v in vals):
+        if not any(v is not None and str(v).strip() for v in vals):
+            continue
+
+        col_a = str(vals[0] or "").strip()
+        col_c = str(vals[2] or "").strip() if len(vals) > 2 else ""
+        col_d = vals[3] if len(vals) > 3 else None
+
+        if expect_header:
+            # This should be the header row (SKU, NOMBRE, TIPO, CANTIDAD)
+            if col_a.upper() == "SKU":
+                expect_header = False
+                in_brand_section = True
+                continue
+            else:
+                expect_header = False
                 continue
 
-            col_a = str(vals[0] or "").strip()
-            col_c = str(vals[2] or "").strip() if len(vals) > 2 else ""
-            col_d = vals[3] if len(vals) > 3 else None
-
-            if expect_header:
-                # This should be the header row (SKU, NOMBRE, TIPO, CANTIDAD)
-                if col_a.upper() == "SKU":
-                    expect_header = False
-                    in_brand_section = True
-                    continue
-                else:
-                    expect_header = False
-                    continue
-
-            if in_brand_section:
-                # Check for end of section (TOTAL row)
-                if "TOTAL" in col_c.upper():
-                    in_brand_section = False
-                    continue
-
-                # Data row: SKU in col A, quantity in col D
-                if col_a and col_d is not None:
-                    try:
-                        qty = int(col_d)
-                        skus[col_a] = qty
-                    except (ValueError, TypeError):
-                        pass
+        if in_brand_section:
+            # Check for end of section (TOTAL row)
+            if "TOTAL" in col_c.upper():
+                in_brand_section = False
                 continue
 
-            # Look for brand section header
-            # Brand name matching: case-insensitive, partial match
-            if col_a and self._brand_matches(col_a, brand):
-                # Check that cols B, C, D are empty (brand header is alone)
-                other_vals = [str(v or "").strip() for v in vals[1:4] if v is not None]
-                if not any(other_vals):
-                    expect_header = True
+            # Data row: SKU in col A, quantity in col D
+            if col_a and col_d is not None:
+                try:
+                    qty = int(col_d)
+                    skus[col_a] = qty
+                except (ValueError, TypeError):
+                    pass
+            continue
 
-        return skus
+        # Look for brand section header
+        # Brand name matching: case-insensitive, partial match
+        if col_a and self._brand_matches(col_a, brand):
+            # Check that cols B, C, D are empty (brand header is alone)
+            other_vals = [str(v or "").strip() for v in vals[1:4] if v is not None]
+            if not any(other_vals):
+                expect_header = True
+
+    return skus
 
     def _brand_matches(self, cell_value: str, brand: str) -> bool:
-        """Check if a cell value matches a brand name (flexible matching)."""
-        cell_lower = cell_value.lower().strip()
-        brand_lower = brand.lower().strip()
+    """Check if a cell value matches a brand name (flexible matching)."""
+    cell_lower = cell_value.lower().strip()
+    brand_lower = brand.lower().strip()
 
-        # Exact match
-        if cell_lower == brand_lower:
-            return True
+    # Exact match
+    if cell_lower == brand_lower:
+        return True
 
-        # Brand is contained in cell or vice versa
-        if brand_lower in cell_lower or cell_lower in brand_lower:
-            return True
+    # Brand is contained in cell or vice versa
+    if brand_lower in cell_lower or cell_lower in brand_lower:
+        return True
 
-        return False
+    return False
