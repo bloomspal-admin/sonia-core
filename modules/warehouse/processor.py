@@ -1,5 +1,5 @@
 """
-SonIA Core — Warehouse Processor
+SonIA Core â Warehouse Processor
 Takes parsed warehouse data and calculates freight costs, address fees,
 and builds sale order previews for each dropshipper.
 """
@@ -13,8 +13,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 logger = logging.getLogger(__name__)
 
-# ── Box weights (GROSS WEIGHT — full box as shipped) ──────────────────
-# Source: Bloomspal Data.xlsx → Cajas tab → "GROSS WEIGHT EN KILOS"
+# ââ Box weights (GROSS WEIGHT â full box as shipped) ââââââââââââââââââ
+# Source: Bloomspal Data.xlsx â Cajas tab â "GROSS WEIGHT EN KILOS"
 BOX_WEIGHTS: Dict[str, float] = {
     "CAJA MASTER 1830 COFFEE": 1.0,
     "CAJA MASTER BAOBAB": 1.0,
@@ -25,7 +25,7 @@ BOX_WEIGHTS: Dict[str, float] = {
     "CAJA MASTER CBTB": 1.0,
     "CAJA GRANDE": 1.65,
     "CAJA MEDIANA": 1.65,
-    "CAJA PEQUEÑA": 1.0,
+    "CAJA PEQUEÃA": 1.0,
     "CAJA KIT": 3.0,
     "CAJA MASTER DON MAIZ": 3.19,
     "CAJA MASTER": 1.0,
@@ -38,19 +38,23 @@ BOX_WEIGHTS: Dict[str, float] = {
 
 DEFAULT_BOX_WEIGHT = 1.0  # kg
 
-# ── Freight pricing ──────────────────────────────────────────────────
+# ââ Freight pricing ââââââââââââââââââââââââââââââââââââââââââââââââââ
 COST_PER_KG = 6.5    # USD per kg
 ADDRESS_FEE = 8.0     # USD per unique order/address
 
-# ── Dropshipper → Odoo partner mapping ───────────────────────────────
+# ââ Dropshipper â Odoo partner mapping âââââââââââââââââââââââââââââââ
 DROPSHIPPER_PARTNERS: Dict[str, Dict[str, Any]] = {
     "DIOS MIO COFFEE": {"partner_id": 2750, "partner_name": "Dios Mio Coffee LLC"},
     "GAVI": {"partner_id": 3891, "partner_name": "GAVICO BRANDS CORP"},
     "HACIENDA VENECIA": {"partner_id": 38954, "partner_name": "Hacienda Venecia"},
     "THE HAIR GENERATION": {"partner_id": 2859, "partner_name": "THE HAIR GENERATION LLC"},
+    "COOCENTRAL": {"partner_id": 3931, "partner_name": "Cooperativa Central de Caficultores del Huila"},
+    "DON MAIZ": {"partner_id": 840, "partner_name": "DON MAIZ SAS"},
+    "CAFE ENLACE": {"partner_id": 875, "partner_name": "Federacion Nacional de Cafeteros - FNC"},
+    "KAFFETO": {"partner_id": 3935, "partner_name": "KAFFETO GOURMET, LLC"},
 }
 
-# ── Logistics product IDs in Odoo ────────────────────────────────────
+# ââ Logistics product IDs in Odoo ââââââââââââââââââââââââââââââââââââ
 LOGISTICS_WEIGHT_PRODUCT_ID = 5788   # "Costo Logistico por Peso (por Kg)"
 LOGISTICS_ADDRESS_FEE_PRODUCT_ID = 5789  # "Address Fee (por Orden)"
 
@@ -79,14 +83,25 @@ def _get_box_weight(box_type: str) -> float:
 def _round_freight_weight(weight_kg: float) -> float:
     """
     Round weight for freight billing:
-      - Less than 1 kg → billed as 1 kg
-      - ≥ 1 kg → round UP to next 0.5 kg
+      - Less than 1 kg â billed as 1 kg
+      - â¥ 1 kg â round UP to next 0.5 kg
     """
     if weight_kg <= 0:
         return 0.0
     if weight_kg < 1.0:
         return 1.0
     return math.ceil(weight_kg * 2) / 2
+
+
+# Folder-name aliases that map to the same partner as an existing brand
+BRAND_ALIASES: Dict[str, str] = {
+    "DMC WALMART": "DIOS MIO COFFEE",
+    "DMC ANDRES CARNE DE RES": "DIOS MIO COFFEE",
+    "DMC KITS": "DIOS MIO COFFEE",
+    "DMC": "DIOS MIO COFFEE",
+    "FNC": "CAFE ENLACE",
+    "FNC - CAFE ENLACE": "CAFE ENLACE",
+}
 
 
 def _resolve_partner(brand_name: str) -> Optional[Dict[str, Any]]:
@@ -97,10 +112,19 @@ def _resolve_partner(brand_name: str) -> Optional[Dict[str, Any]]:
     if name_upper in DROPSHIPPER_PARTNERS:
         return DROPSHIPPER_PARTNERS[name_upper]
 
+    # Check aliases
+    if name_upper in BRAND_ALIASES:
+        return DROPSHIPPER_PARTNERS.get(BRAND_ALIASES[name_upper])
+
     # Partial match
     for key, info in DROPSHIPPER_PARTNERS.items():
         if key in name_upper or name_upper in key:
             return info
+
+    # Alias partial match
+    for alias, target in BRAND_ALIASES.items():
+        if alias in name_upper or name_upper in alias:
+            return DROPSHIPPER_PARTNERS.get(target)
 
     logger.warning(f"No partner mapping found for brand: '{brand_name}'")
     return None
@@ -117,7 +141,7 @@ class WarehouseProcessor:
         self.sku_map = sku_map or {}
 
     def load_sku_map(self, path: str):
-        """Load SKU→product ID mapping from a JSON file."""
+        """Load SKUâproduct ID mapping from a JSON file."""
         with open(path, "r") as f:
             self.sku_map = json.load(f)
         logger.info(f"Loaded {len(self.sku_map)} SKU mappings from {path}")
@@ -136,7 +160,7 @@ class WarehouseProcessor:
                     "partner_name": "Dios Mio Coffee LLC",
                     "unique_orders": 8,
                     "boxes_detail": {
-                        "CAJA PEQUEÑA": {"count": 5, "weight_per_box": 1.0, "total_weight": 5.0},
+                        "CAJA PEQUEÃA": {"count": 5, "weight_per_box": 1.0, "total_weight": 5.0},
                         ...
                     },
                     "total_boxes": 7,
@@ -175,7 +199,7 @@ class WarehouseProcessor:
                 total_weight_raw += total
 
             total_weight_raw = round(total_weight_raw, 2)
-            total_weight_billed = total_weight_raw  # No rounding — bill exact weight
+            total_weight_billed = total_weight_raw  # No rounding â bill exact weight
 
             # Calculate costs
             unique_orders = data.get("unique_orders", 0)
@@ -213,7 +237,7 @@ class WarehouseProcessor:
                 order_lines.append({
                     "product_id": LOGISTICS_WEIGHT_PRODUCT_ID,
                     "sku": "LOGISTICS-WEIGHT-KG",
-                    "name": "Costo Logístico por Peso (por Kg)",
+                    "name": "Costo LogÃ­stico por Peso (por Kg)",
                     "product_uom_qty": total_weight_billed,
                     "price_unit": COST_PER_KG,
                 })
@@ -248,7 +272,7 @@ class WarehouseProcessor:
             }
 
             logger.info(
-                f"  {brand}: weight={total_weight_raw}→{total_weight_billed}kg, "
+                f"  {brand}: weight={total_weight_raw}â{total_weight_billed}kg, "
                 f"freight=${freight_cost}, addr=${address_fee}, total=${total_logistics}"
             )
 
