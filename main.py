@@ -350,7 +350,7 @@ def run_daily_flow(manual: bool = False):
                         bbdd_data = odoo.get_whatsapp_bbdd(config.ODOO_SPREADSHEET_ID)
                         bbdd_contacts = bbdd_data.get("contacts", [])
                         for c in bbdd_contacts:
-                            tid = c.get("tenant_id")
+                            tid = c.get("tenant_number")
                             if tid and c.get("whatsapp") and c.get("rol", "").lower() == "cliente" and not c.get("bloqueo"):
                                 contacts_by_tenant.setdefault(tid, []).append(c)
                         logger.info(f"Loaded {len(bbdd_contacts)} contacts from WhatsApp BBDD, {len(contacts_by_tenant)} tenants with active contacts")
