@@ -152,8 +152,8 @@ def run_daily_flow(manual: bool = False):
 
             shipment_data = {
                 "tracking_number": item["tracking_number"],
-                "client_id": client_info.get("id"),
-                "client_name_raw": client_info.get("name", f"Tenant-{tenant_id}"),
+                "client_id": client_info.get("client_id"),
+                "client_name_raw": client_info.get("client_name", f"Tenant-{tenant_id}"),
                 "dynamo_data": json.dumps({
                     "reserve_id": item.get("reserve_id"),
                     "order_id": item.get("order_id"),
@@ -344,8 +344,8 @@ def run_daily_flow(manual: bool = False):
             if odoo.authenticate():
                 # Process each client/tenant
                 for tenant_id, client_info in tenant_mapping.items():
-                    client_id = client_info.get("id")
-                    client_name = client_info.get("name", f"Tenant-{tenant_id}")
+                    client_id = client_info.get("client_id")
+                    client_name = client_info.get("client_name", f"Tenant-{tenant_id}")
                     odoo_company_id = client_info.get("odoo_company_id")
 
                     # Get shipments for this client
