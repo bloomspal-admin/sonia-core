@@ -342,6 +342,22 @@ def run_daily_flow(manual: bool = False):
             report_gen = ReportGenerator()
 
             if odoo.authenticate():
+                # Read WhatsApp BBDD spreadsheet for contact numbers
+                bbdd_contacts = []
+                contacts_by_tenant = {}
+                if config.ODOO_SPREADSHEET_ID:
+                    try:
+                        bbdd_data = odoo.get_whatsapp_bbdd(config.ODOO_SPREADSHEET_ID)
+                        bbdd_contacts = bbdd_data.get("contacts", [])
+                        for c in bbdd_contacts:
+                            tid = c.get("tenant_id")
+                            if tid and c.get("whatsapp") and c.get("rol", "").lower() == "cliente" and not c.get("bloqueo"):
+                                contacts_by_tenant.setdefault(tid, []).append(c)
+                        logger.info(f"Loaded {len(bbdd_contacts)} contacts from WhatsApp BBDD, {len(contacts_by_tenant)} tenants with active contacts")
+                    except Exception as e:
+                        logger.error(f"Error reading WhatsApp BBDD spreadsheet: {e}")
+                        errors.append({"step": "whatsapp_bbdd", "error": str(e)})
+
                 # Process each client/tenant
                 for tenant_id, client_info in tenant_mapping.items():
                     client_id = client_info.get("client_id")
@@ -359,22 +375,17 @@ def run_daily_flow(manual: bool = False):
                         report_text = report_gen.generate_client_report(client_name, shipments)
                         metrics["reports_generated"] += 1
 
-                        # Get contacts from Odoo if we have odoo_company_id
-                        if odoo_company_id:
-                            try:
-                                contacts = odoo.get_contacts_for_company(odoo_company_id)
-
-                                for contact in contacts:
-                                    phone = contact.get("whatsapp")
-                                    if phone:
-                                        success = whatsapp.send_report_sync(phone, report_text, client_name)
-                                        if success:
-                                            metrics["reports_sent"] += 1
-                            except Exception as e:
-                                logger.error(f"Error getting Odoo contacts for company {odoo_company_id}: {e}")
-                                errors.append({"step": "odoo_contacts", "error": str(e)})
+                        # Send report to contacts from WhatsApp BBDD spreadsheet
+                        tenant_contacts = contacts_by_tenant.get(int(tenant_id), [])
+                        if tenant_contacts:
+                            for contact in tenant_contacts:
+                                phone = contact.get("whatsapp")
+                                if phone:
+                                    success = whatsapp.send_report_sync(phone, report_text, client_name)
+                                    if success:
+                                        metrics["reports_sent"] += 1
                         else:
-                            # Client not in Odoo - alert admin
+                            # No contacts for this tenant - alert admin
                             active_count = len([s for s in shipments if not s.get("is_delivered")])
                             alert = report_gen.generate_admin_inconsistency_alert(
                                 client_name, tenant_id, active_count
