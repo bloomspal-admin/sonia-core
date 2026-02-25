@@ -1,8 +1,8 @@
 """
-ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
-ÃÂ¢ÃÂÃÂ                    SonIA Core ÃÂ¢ÃÂÃÂ Daily Tracking Orchestrator                    ÃÂ¢ÃÂÃÂ
-ÃÂ¢ÃÂÃÂ                              BloomsPal                                        ÃÂ¢ÃÂÃÂ
-ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ                    SonIA Core ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Daily Tracking Orchestrator                    ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ                              BloomsPal                                        ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
+ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
 
 Automated daily flow:
 1. Read tracking numbers from DynamoDB (READ ONLY)
@@ -91,7 +91,7 @@ def run_daily_flow(manual: bool = False):
     unmapped_tenants = set()
 
     try:
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Initialize Database ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Initialize Database ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         db = DBManager(config.DATABASE_URL)
         db.connect()
         run_id = db.start_run(run_date=date.today())
@@ -110,7 +110,7 @@ def run_daily_flow(manual: bool = False):
         }
         errors = []
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 1: Read from DynamoDB ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 1: Read from DynamoDB ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         logger.info("STEP 1: Reading from DynamoDB...")
         try:
             dynamo = DynamoReader(
@@ -131,7 +131,7 @@ def run_daily_flow(manual: bool = False):
             _send_failure_alert(f"Error leyendo DynamoDB: {e}")
             return
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 2: Sync tracking numbers to PostgreSQL ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 2: Sync tracking numbers to PostgreSQL ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         logger.info("STEP 2: Syncing to PostgreSQL...")
         tenant_mapping = db.get_tenant_mapping()
         new_count = 0
@@ -174,7 +174,7 @@ def run_daily_flow(manual: bool = False):
         # Alert admin about unmapped tenants
         if unmapped_tenants:
             unmapped_list = ", ".join(str(t) for t in sorted(unmapped_tenants))
-            alert_msg = f"ÃÂ¢ÃÂÃÂ ÃÂ¯ÃÂ¸ÃÂ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
+            alert_msg = f"ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ ÃÂÃÂ¯ÃÂÃÂ¸ÃÂÃÂ *Tenants sin mapeo detectados*\n\nIDs: {unmapped_list}\n\nPor favor actualizar la tabla tenant_mapping."
             if config.ADMIN_WHATSAPP and config.SONIA_AGENT_URL:
                 try:
                     whatsapp = WhatsAppSender(
@@ -186,7 +186,7 @@ def run_daily_flow(manual: bool = False):
                 except Exception as e:
                     logger.error(f"Failed to send unmapped tenants alert: {e}")
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 3: Query FedEx for undelivered shipments ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 3: Query FedEx for undelivered shipments ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         logger.info("STEP 3: Querying FedEx API...")
         undelivered = db.get_undelivered_shipments()
         logger.info(f"Found {len(undelivered)} undelivered shipments to check")
@@ -283,7 +283,7 @@ def run_daily_flow(manual: bool = False):
                 logger.error(f"STEP 3 ERROR: {e}")
                 errors.append({"step": "fedex_check", "error": str(e)})
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 4: Detect anomalies (Part C) ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 4: Detect anomalies (Part C) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         logger.info("STEP 4: Detecting anomalies...")
         try:
             detector = AnomalyDetector(thresholds={
@@ -325,7 +325,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 4 ERROR: {e}")
             errors.append({"step": "anomaly_detection", "error": str(e)})
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 5: Query Odoo and send reports ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 5: Query Odoo and send reports ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         logger.info("STEP 5: Querying Odoo and sending reports...")
         try:
             odoo = OdooClient(
@@ -421,7 +421,7 @@ def run_daily_flow(manual: bool = False):
             logger.error(f"STEP 5 ERROR: {e}")
             errors.append({"step": "reports_and_whatsapp", "error": str(e)})
 
-        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ STEP 6: Complete run ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
+        # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ STEP 6: Complete run ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
         status = "success" if not errors else "partial"
         db.complete_run(run_id, status, metrics, errors)
 
@@ -437,7 +437,7 @@ def run_daily_flow(manual: bool = False):
         logger.critical(f"CRITICAL ERROR in daily flow: {e}")
         import traceback
         traceback.print_exc()
-        _send_failure_alert(f"Error crÃÂÃÂ­tico en flujo diario: {e}")
+        _send_failure_alert(f"Error crÃÂÃÂÃÂÃÂ­tico en flujo diario: {e}")
         if db and run_id:
             try:
                 db.complete_run(run_id, "failed", {}, [{"step": "critical", "error": str(e)}])
@@ -489,7 +489,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SonIA Core ÃÂ¢ÃÂÃÂ BloomsPal",
+    title="SonIA Core ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ BloomsPal",
     description="Daily tracking orchestrator",
     lifespan=lifespan,
 )
@@ -584,7 +584,7 @@ async def get_status():
 
 
 # ============================================================================
-# WAREHOUSE PROCESSING ÃÂ¢ÃÂÃÂ In-memory preview store
+# WAREHOUSE PROCESSING ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ In-memory preview store
 # ============================================================================
 
 _warehouse_previews: Dict[str, dict] = {}
@@ -618,14 +618,14 @@ def _check_duplicate_awbs(all_awbs: list) -> dict:
         return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
     except Exception as e:
         logger.warning(f"Could not check duplicate AWBs: {e}")
-        return {"has_duplicates": False, "duplicates": []}  # token ÃÂ¢ÃÂÃÂ preview data
+        return {"has_duplicates": False, "duplicates": []}  # token ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ preview data
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
 
 
 def _load_sku_map() -> dict:
-    """Load SKUÃÂ¢ÃÂÃÂproduct ID mapping."""
+    """Load SKUÃÂÃÂ¢ÃÂÃÂÃÂÃÂproduct ID mapping."""
     if os.path.exists(_SKU_MAP_PATH):
         with open(_SKU_MAP_PATH, "r") as f:
             return json.load(f)
@@ -647,7 +647,7 @@ async def warehouse_ui():
 async def process_warehouse(file: UploadFile = File(...)):
     """
     Upload a warehouse Excel file, parse it, and return a preview.
-    Does NOT create orders yet ÃÂ¢ÃÂÃÂ user must confirm.
+    Does NOT create orders yet ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ user must confirm.
     """
     # Validate file
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
@@ -811,7 +811,7 @@ async def confirm_warehouse(token: str):
                     "error": str(e),
                 }
 
-        # Ã¢ÂÂÃ¢ÂÂ Save billing data to PostgreSQL Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+        # ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ Save billing data to PostgreSQL ÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂÃÂ¢ÃÂÃÂ
         try:
             billing_conn = psycopg2.connect(config.DATABASE_URL)
             billing_cur = billing_conn.cursor()
@@ -917,7 +917,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SonIA ÃÂ¢ÃÂÃÂ Warehouse Processor</title>
+    <title>SonIA ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Warehouse Processor</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
@@ -970,7 +970,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>SonIA ÃÂ¢ÃÂÃÂ Warehouse Processor</h1>
+        <h1>SonIA ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Warehouse Processor</h1>
         <p class="subtitle">Sube el archivo Excel del warehouse para crear ordenes de venta en Odoo</p>
 
         <!-- Upload Section -->
@@ -1248,28 +1248,6 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
 </html>
 """
 
-
-
-
-@app.delete("/api/admin/delete-billing/{record_id}")
-async def delete_billing_record(record_id: int):
-    """Temporary endpoint to delete a warehouse_billing record by ID."""
-    try:
-        conn = psycopg2.connect(config.DATABASE_URL)
-        cur = conn.cursor()
-        cur.execute("DELETE FROM warehouse_billing WHERE id = %s RETURNING id", (record_id,))
-        deleted = cur.fetchone()
-        conn.commit()
-        cur.close()
-        conn.close()
-        if deleted:
-            return {"status": "deleted", "id": record_id}
-        else:
-            raise HTTPException(404, f"Record {record_id} not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error deleting record: {e}")
 
 if __name__ == "__main__":
     import uvicorn
