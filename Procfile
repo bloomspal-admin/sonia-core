@@ -1,1 +1,1 @@
-web: uvicorn main:app --host 0.0.0.0 --port $PORT
+web: python -c "import psycopg2,os;c=psycopg2.connect(os.environ['DATABASE_URL']);r=c.cursor();r.execute(\"DELETE FROM excluded_shipments WHERE reason='unknown_status_3strikes'\");print(f'Deleted {r.rowcount} rows');c.commit();r.close();c.close()" && uvicorn main:app --host 0.0.0.0 --port $PORT
