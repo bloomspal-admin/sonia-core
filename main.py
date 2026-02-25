@@ -1103,7 +1103,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 // SKU detail table
                 if (info.skus && Object.keys(info.skus).length > 0) {
                     html += '<h4 style="margin:12px 0 6px;font-size:0.95em;color:#555;">Detalle SKUs</h4>';
-                    html += '<table><tr><th>SKU Code</th><th class="text-right">Cantidad</th><th class="text-right">Precio</th><th class="text-right">Subtotal</th></tr>';
+                    html += '<table><tr><th>Producto</th><th class="text-right">Cantidad</th><th class="text-right">Precio</th><th class="text-right">Subtotal</th></tr>';
                     var skuEntries = Object.entries(info.skus);
                     skuEntries.sort(function(a,b){ return b[1].qty - a[1].qty; });
                     for (var si = 0; si < skuEntries.length; si++) {
@@ -1112,7 +1112,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                         var rowClass = skuInfo.product_id ? '' : ' style="color:#c0392b;font-weight:bold;"';
                         var price = skuInfo.price_unit || 0;
                     var subtotal = (price * skuInfo.qty).toFixed(2);
-                    html += '<tr' + rowClass + '><td>' + skuCode + '</td><td class="text-right">' + skuInfo.qty + '</td><td class="text-right">$' + price.toFixed(2) + '</td><td class="text-right">$' + subtotal + '</td></tr>';
+                    html += '<tr' + rowClass + '><td>' + (skuInfo.product_name || skuCode) + '</td><td class="text-right">' + skuInfo.qty + '</td><td class="text-right">$' + price.toFixed(2) + '</td><td class="text-right">$' + subtotal + '</td></tr>';
                     }
                     html += '</table>';
                     // Total declared value
