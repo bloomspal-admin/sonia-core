@@ -42,6 +42,7 @@ from modules.db_manager import DBManager
 from modules.odoo_client import OdooClient
 from modules.whatsapp_sender import WhatsAppSender
 from modules.report_generator import ReportGenerator
+from modules.email_sender import EmailSender
 from modules.anomaly_detector import AnomalyDetector
 from modules.warehouse.parser import WarehouseParser
 from modules.warehouse.processor import WarehouseProcessor
@@ -341,6 +342,18 @@ def run_daily_flow(manual: bool = False):
 
             report_gen = ReportGenerator()
 
+            # Initialize email sender
+            email_sender = None
+            if config.SMTP_HOST and config.SMTP_USER:
+                email_sender = EmailSender(
+                    smtp_host=config.SMTP_HOST,
+                    smtp_port=config.SMTP_PORT,
+                    smtp_user=config.SMTP_USER,
+                    smtp_password=config.SMTP_PASSWORD,
+                    from_email=config.SMTP_FROM_EMAIL or config.SMTP_USER,
+                    from_name=config.SMTP_FROM_NAME,
+                )
+
             if odoo.authenticate():
                 # Read WhatsApp BBDD spreadsheet for contact numbers
                 bbdd_contacts = []
@@ -384,6 +397,11 @@ def run_daily_flow(manual: bool = False):
                                     success = whatsapp.send_report_sync(phone, report_text, client_name)
                                     if success:
                                         metrics["reports_sent"] += 1
+                            # Also send via email
+                            if email_sender:
+                                email_addr = contact.get("email")
+                                if email_addr:
+                                    email_sender.send_report_email(email_addr, client_name, report_text)
                         else:
                             # No contacts for this tenant - alert admin
                             active_count = len([s for s in shipments if not s.get("is_delivered")])
