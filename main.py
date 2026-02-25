@@ -708,8 +708,9 @@ async def process_warehouse(file: UploadFile = File(...)):
                 "address_fee": data["address_fee"],
                 "total_logistics": data["total_logistics"],
                 "total_skus_sold": data["total_skus_sold"],
-                "skus": {k: {"qty": v["qty"], "product_id": v.get("product_id")} for k, v in data.get("skus", {}).items()},
+                "skus": {k: {"qty": v["qty"], "product_id": v.get("product_id"), "price_unit": {ol["sku"]: ol["price_unit"] for ol in data.get("order_lines", []) if "sku" in ol}.get(k, 0.0)} for k, v in data.get("skus", {}).items()},
                 "unmapped_skus": data["unmapped_skus"],
+                "total_declared_value": round(sum(ol.get("price_unit", 0) * ol.get("product_uom_qty", 0) for ol in data.get("order_lines", []) if ol.get("sku", "") not in ("LOGISTICS-WEIGHT-KG", "LOGISTICS-ADDRESS-FEE")), 2),
                 "dispatch_date": str(data.get("dispatch_date", "")) if data.get("dispatch_date") else None,
             }
 
