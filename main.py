@@ -755,33 +755,61 @@ async def confirm_warehouse(token: str):
         if not creator.authenticate():
             raise HTTPException(500, "Failed to authenticate with Odoo")
 
-        # Create sale orders for each dropshipper
+        # Create sale orders for each dropshipper (split: products + logistics)
+        LOGISTICS_SKUS = ["LOGISTICS-WEIGHT-KG", "LOGISTICS-ADDRESS-FEE"]
         results = {}
         for brand, data in preview.items():
             try:
-                order = creator.create_sale_order(
-                    partner_id=data["partner_id"],
-                    order_lines=data["order_lines"],
-                    dispatch_date=data.get("dispatch_date"),
-                )
+                all_lines = data["order_lines"]
+                product_lines = [ol for ol in all_lines if ol.get("sku", "") not in LOGISTICS_SKUS]
+                logistics_lines = [ol for ol in all_lines if ol.get("sku", "") in LOGISTICS_SKUS]
+
+                product_order = None
+                logistics_order = None
+
+                # ---- Order 1: Products ----
+                if product_lines:
+                    product_order = creator.create_sale_order(
+                        partner_id=data["partner_id"],
+                        order_lines=product_lines,
+                        dispatch_date=data.get("dispatch_date"),
+                    )
+                    logger.info(f"Created PRODUCT order {product_order['order_name']} for {brand}")
+
+                # ---- Order 2: Logistics ----
+                if logistics_lines:
+                    logistics_order = creator.create_sale_order(
+                        partner_id=data["partner_id"],
+                        order_lines=logistics_lines,
+                        dispatch_date=data.get("dispatch_date"),
+                    )
+                    logger.info(f"Created LOGISTICS order {logistics_order['order_name']} for {brand}")
+
                 results[brand] = {
                     "status": "created",
                     "partner_name": data["partner_name"],
-                    "order_id": order["order_id"],
-                    "order_name": order["order_name"],
-                    "amount_total": order["amount_total"],
-                    "state": order["state"],
-                    "url": f"{config.ODOO_URL}/odoo/sales/{order['order_id']}",
                 }
-                logger.info(f"Created order {order['order_name']} for {brand}")
+
+                if product_order:
+                    results[brand]["order_id"] = product_order["order_id"]
+                    results[brand]["order_name"] = product_order["order_name"]
+                    results[brand]["amount_total"] = product_order["amount_total"]
+                    results[brand]["state"] = product_order["state"]
+                    results[brand]["url"] = f"{config.ODOO_URL}/odoo/sales/{product_order['order_id']}"
+
+                if logistics_order:
+                    results[brand]["logistics_order_id"] = logistics_order["order_id"]
+                    results[brand]["logistics_order_name"] = logistics_order["order_name"]
+                    results[brand]["logistics_amount_total"] = logistics_order["amount_total"]
+                    results[brand]["logistics_url"] = f"{config.ODOO_URL}/odoo/sales/{logistics_order['order_id']}"
+
             except Exception as e:
-                logger.error(f"Failed to create order for {brand}: {e}")
+                logger.error(f"Failed to create orders for {brand}: {e}")
                 results[brand] = {
                     "status": "error",
                     "partner_name": data["partner_name"],
                     "error": str(e),
                 }
-
 
         # ââ Save billing data to PostgreSQL ââââââââââââââââââââââ
         try:
