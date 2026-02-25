@@ -90,9 +90,10 @@ class WarehouseParser:
 
             # 3. Parse PRODUCTS SOLD for this brand (SKUs)
             if "PRODUCTS SOLD" in self.sheet_names:
-                skus = self._parse_products_sold_for_brand(brand)
+                skus, sku_prices = self._parse_products_sold_for_brand(brand)
                 brand_data["skus"] = skus
                 brand_data["total_skus_sold"] = sum(skus.values())
+                brand_data["sku_prices"] = sku_prices
             elif "PICKING LIST" in self.sheet_names:
                 skus = self._parse_picking_list()
                 brand_data["skus"] = skus
@@ -364,19 +365,24 @@ class WarehouseParser:
         logger.info(f"  Parsed PICKING LIST: {len(skus)} SKUs, total {sum(skus.values())} units")
         return skus
 
-    def _parse_products_sold_for_brand(self, brand: str) -> Dict[str, int]:
+    def _parse_products_sold_for_brand(self, brand: str):
         """
         Parse the PRODUCTS SOLD tab for a specific brand.
 
         Structure:
             Brand name appears alone in col A as a section header.
-            Next row is column headers: SKU, NOMBRE PRODUCTO, TIPO, CANTIDAD
+            Next row is column headers: SKU, NOMBRE PRODUCTO, TIPO, CANTIDAD[, PRECIO]
             Then data rows until a row with 'TOTAL:' in col C.
+
+        Returns:
+            Tuple of (skus: Dict[str, int], sku_prices: Dict[str, float])
         """
         ws = self.wb["PRODUCTS SOLD"]
         skus = {}
+        sku_prices = {}
         in_brand_section = False
         expect_header = False
+        has_price_col = False
 
         for row in ws.iter_rows(min_row=1, values_only=False):
             vals = [c.value for c in row]
@@ -389,8 +395,11 @@ class WarehouseParser:
             col_d = vals[3] if len(vals) > 3 else None
 
             if expect_header:
-                # This should be the header row (SKU, NOMBRE, TIPO, CANTIDAD)
+                # This should be the header row (SKU, NOMBRE, TIPO, CANTIDAD[, PRECIO])
                 if col_a.upper() == "SKU":
+                    col_e_header = str(vals[4] or "").strip().upper() if len(vals) > 4 else ""
+                    if any(kw in col_e_header for kw in ["PRECIO", "PRICE", "VALOR", "VALUE", "COST"]):
+                        has_price_col = True
                     expect_header = False
                     in_brand_section = True
                     continue
@@ -404,11 +413,18 @@ class WarehouseParser:
                     in_brand_section = False
                     continue
 
-                # Data row: SKU in col A, quantity in col D
+                # Data row: SKU in col A, quantity in col D, price in col E
                 if col_a and col_d is not None:
                     try:
                         qty = int(col_d)
                         skus[col_a] = qty
+                        if has_price_col and len(vals) > 4 and vals[4] is not None:
+                            try:
+                                price = float(vals[4])
+                                if price > 0:
+                                    sku_prices[col_a] = price
+                            except (ValueError, TypeError):
+                                pass
                     except (ValueError, TypeError):
                         pass
                 continue
@@ -421,7 +437,7 @@ class WarehouseParser:
                 if not any(other_vals):
                     expect_header = True
 
-        return skus
+        return skus, sku_prices
 
     def _brand_matches(self, cell_value: str, brand: str) -> bool:
         """Check if a cell value matches a brand name (flexible matching)."""
