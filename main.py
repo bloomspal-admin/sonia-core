@@ -527,6 +527,29 @@ async def trigger_manual_run(api_key: str = ""):
     return {"status": "started", "message": "Daily flow triggered manually"}
 
 
+@app.post("/api/test-email")
+async def test_email(api_key: str = "", to_email: str = ""):
+    """Send a test email to verify SMTP configuration."""
+    if api_key != config.SONIA_AGENT_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    if not to_email:
+        raise HTTPException(status_code=400, detail="to_email is required")
+    try:
+        es = EmailSender(
+            smtp_host=config.SMTP_HOST,
+            smtp_port=config.SMTP_PORT,
+            smtp_user=config.SMTP_USER,
+            smtp_password=config.SMTP_PASSWORD,
+            from_email=config.SMTP_FROM_EMAIL or config.SMTP_USER,
+            from_name=config.SMTP_FROM_NAME,
+        )
+        test_report = "Este es un reporte de prueba de SonIA Core.\nEnvios activos: 5\nEntregados hoy: 2\nEn transito: 3\n\nTodo funciona correctamente."
+        success = es.send_report_email(to_email, "PRUEBA", test_report)
+        return {"status": "sent" if success else "failed", "to": to_email}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 @app.get("/api/status")
 async def get_status():
     """Get the status of the last run."""
