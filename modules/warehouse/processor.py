@@ -55,6 +55,18 @@ THG_DECLARED_VALUES: Dict[str, float] = {
     "HB50": 24.5,      # Hair Boomer 50ml with small case
 }
 
+# ─── THG Product Names (for preview display) ─────────────────────────
+THG_PRODUCT_NAMES: Dict[str, str] = {
+    "tab": "Tame & Boom",
+    "TB1": "THG Cosmetiquera",
+    "gz": "Gen Zleek With Small Case",
+    "PHB503": "Three Pack + 3 Hair Boomer 50ml",
+    "HB1": "Hair Boomer 30ml With Small Case",
+    "PHB3": "Three Pack 3 Hair Boomer 30ml",
+    "THB2": "Two Pack Hair Boomer 50ml",
+    "HB50": "Hair Boomer 50ml With Small Case",
+}
+
 # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Dropshipper ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Odoo partner mapping ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
 DROPSHIPPER_PARTNERS: Dict[str, Dict[str, Any]] = {
     "DIOS MIO COFFEE": {"partner_id": 2750, "partner_name": "Dios Mio Coffee LLC"},
@@ -227,7 +239,7 @@ class WarehouseProcessor:
             for sku, qty in data.get("skus", {}).items():
                 product_id = self.sku_map.get(sku)
                 if product_id:
-                    skus_detail[sku] = {"qty": qty, "product_id": product_id}
+                    skus_detail[sku] = {"qty": qty, "product_id": product_id, "product_name": THG_PRODUCT_NAMES.get(sku, sku)}
                 else:
                     unmapped_skus.append(sku)
                     logger.warning(f"SKU '{sku}' not found in SKU map for brand '{brand}'")
