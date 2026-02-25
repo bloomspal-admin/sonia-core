@@ -42,6 +42,19 @@ DEFAULT_BOX_WEIGHT = 1.0  # kg
 COST_PER_KG = 6.5    # USD per kg
 ADDRESS_FEE = 8.0     # USD per unique order/address
 
+# ─── THG Declared Values (USD) ──────────────────────────────────────
+# Source: PRECIOS THG spreadsheet (declared customs values per product)
+THG_DECLARED_VALUES: Dict[str, float] = {
+    "tab": 25.2,       # Tame & Boom
+    "TB1": 46.9,       # THG Cosmetiquera
+    "gz": 12.6,        # Gen Zleek With Small Case
+    "PHB503": 60.0,    # Three pack plus 3 Hair Boomer 50ml
+    "HB1": 16.1,       # Hair Boomer 30ml with small case
+    "PHB3": 46.9,      # Three pack 3 Hair Boomer 30ml
+    "THB2": 48.3,      # Two pack Hair Boomer 50ml
+    "HB50": 24.5,      # Hair Boomer 50ml with small case
+}
+
 # ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Dropshipper ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ Odoo partner mapping ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂ
 DROPSHIPPER_PARTNERS: Dict[str, Dict[str, Any]] = {
     "DIOS MIO COFFEE": {"partner_id": 2750, "partner_name": "Dios Mio Coffee LLC"},
@@ -222,13 +235,16 @@ class WarehouseProcessor:
             # Build order lines for Odoo
             order_lines = []
 
-            # Product lines (all at $0.00)
+            # Product lines with declared values
+            sku_prices = data.get("sku_prices", {})
             for sku, info in skus_detail.items():
+                # Price priority: 1) parsed from Excel PRECIO col, 2) THG declared values, 3) 0.0
+                price = sku_prices.get(sku, THG_DECLARED_VALUES.get(sku, 0.0))
                 order_lines.append({
                     "product_id": info["product_id"],
                     "sku": sku,
-                            "product_uom_qty": info["qty"],
-                    "price_unit": 0.0,
+                    "product_uom_qty": info["qty"],
+                    "price_unit": price,
                 })
 
             # Logistics: freight by weight
