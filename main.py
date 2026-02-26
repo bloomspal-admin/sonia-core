@@ -574,30 +574,46 @@ async def tenant_distribution(api_key: str = ""):
     if api_key != config.SONIA_AGENT_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
     try:
-        db = DatabaseManager(config.DATABASE_URL)
-        db.cursor.execute("""
+        import psycopg2
+        conn = psycopg2.connect(config.DATABASE_URL)
+        cur = conn.cursor()
+        cur.execute("""
             SELECT dynamo_tenant_id, COUNT(*) as count,
                    COUNT(DISTINCT tracking_number) as unique_trackings
             FROM shipments
             GROUP BY dynamo_tenant_id
             ORDER BY count DESC
         """)
-        rows = db.cursor.fetchall()
-        cols = [desc[0] for desc in db.cursor.description]
+        rows = cur.fetchall()
+        cols = [desc[0] for desc in cur.description]
         distribution = [dict(zip(cols, row)) for row in rows]
-        db.cursor.execute("SELECT COUNT(*) FROM shipments")
-        total = db.cursor.fetchone()[0]
-        db.cursor.execute("SELECT COUNT(*) FROM shipments WHERE dynamo_tenant_id IS NULL")
-        null_count = db.cursor.fetchone()[0]
-        db.cursor.execute("""
+        
+        cur.execute("SELECT COUNT(*) FROM shipments")
+        total = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM shipments WHERE dynamo_tenant_id IS NULL")
+        null_count = cur.fetchone()[0]
+        
+        cur.execute("""
             SELECT dynamo_tenant_id, substring(dynamo_data::text, 1, 300) as sample
-            FROM shipments WHERE dynamo_data IS NOT NULL LIMIT 5
+            FROM shipments WHERE dynamo_data IS NOT NULL 
+            AND dynamo_tenant_id != 1 AND dynamo_tenant_id != 13
+            LIMIT 3
         """)
-        samples = [dict(zip([d[0] for d in db.cursor.description], r)) for r in db.cursor.fetchall()]
-        db.close()
-        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples}
+        samples_other = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        
+        cur.execute("""
+            SELECT dynamo_tenant_id, substring(dynamo_data::text, 1, 300) as sample
+            FROM shipments WHERE dynamo_data IS NOT NULL
+            LIMIT 3
+        """)
+        samples = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        
+        conn.close()
+        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples, "samples_other_tenants": samples_other}
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 @app.get("/api/status")
