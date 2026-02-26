@@ -616,6 +616,51 @@ async def tenant_distribution(api_key: str = ""):
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+@app.get("/api/diagnostic/report-preview")
+async def report_preview(api_key: str = "", tenant_id: int = 13):
+    """Test what the report query returns for a specific tenant."""
+    if api_key != config.SONIA_AGENT_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    try:
+        import psycopg2
+        conn = psycopg2.connect(config.DATABASE_URL)
+        cur = conn.cursor()
+        # Exact same query as get_shipments_by_tenant_for_report
+        cur.execute("""
+            SELECT COUNT(*) FROM shipments
+            WHERE dynamo_tenant_id = %s
+                AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
+        """, (tenant_id,))
+        report_count = cur.fetchone()[0]
+        
+        cur.execute("SELECT COUNT(*) FROM excluded_shipments")
+        excluded_count = cur.fetchone()[0]
+        
+        cur.execute("""
+            SELECT COUNT(*) FROM shipments WHERE dynamo_tenant_id = %s
+        """, (tenant_id,))
+        total_for_tenant = cur.fetchone()[0]
+        
+        cur.execute("""
+            SELECT COUNT(*) FROM excluded_shipments e
+            JOIN shipments s ON e.tracking_number = s.tracking_number
+            WHERE s.dynamo_tenant_id = %s
+        """, (tenant_id,))
+        excluded_for_tenant = cur.fetchone()[0]
+        
+        conn.close()
+        return {
+            "tenant_id": tenant_id,
+            "total_for_tenant": total_for_tenant,
+            "excluded_for_tenant": excluded_for_tenant,
+            "report_would_show": report_count,
+            "total_excluded": excluded_count
+        }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "tb": traceback.format_exc()}
+
+
 @app.get("/api/status")
 async def get_status():
     """Get the status of the last run."""
