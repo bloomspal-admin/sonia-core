@@ -284,11 +284,11 @@ class DBManager:
                 delivery_date, estimated_delivery_date, destination_city,
                 destination_state, destination_country, origin_city, origin_state,
                 origin_country, is_delivered, last_fedex_check, last_status_change,
-                fedex_check_count, raw_fedex_response, dynamo_data
+                fedex_check_count, raw_fedex_response, dynamo_data, dynamo_tenant_id
             )
             VALUES (
                 %s, %s, %s, %s::shipment_status, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON CONFLICT (tracking_number) DO UPDATE SET
                 client_id = EXCLUDED.client_id,
@@ -311,11 +311,13 @@ class DBManager:
                 last_status_change = EXCLUDED.last_status_change,
                 fedex_check_count = EXCLUDED.fedex_check_count,
                 raw_fedex_response = EXCLUDED.raw_fedex_response,
-                dynamo_data = EXCLUDED.dynamo_data
+                dynamo_data = EXCLUDED.dynamo_data,
+                dynamo_tenant_id = EXCLUDED.dynamo_tenant_id
             """
 
             raw_fedex = data.get("raw_fedex_response")
             dynamo = data.get("dynamo_data")
+            dynamo_tenant_id = data.get("dynamo_tenant_id")
 
             self.cursor.execute(query, (
                 tracking_number,
@@ -339,7 +341,8 @@ class DBManager:
                 data.get("last_status_change"),
                 data.get("fedex_check_count", 0),
                 Json(raw_fedex) if raw_fedex else None,
-                Json(dynamo) if dynamo else None
+                Json(dynamo) if dynamo else None,
+                dynamo_tenant_id
             ))
 
             self.conn.commit()
@@ -437,6 +440,43 @@ class DBManager:
 
         except psycopg2.Error as e:
             logger.error(f"Error getting shipments for report: {e}")
+            return []
+
+    def get_shipments_by_tenant_for_report(self, dynamo_tenant_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all shipments for a specific DynamoDB tenant.
+        Used for generating reports based on Odoo tenant mapping.
+
+        Args:
+            dynamo_tenant_id: Tenant ID from DynamoDB
+
+        Returns:
+            List of shipment dicts
+        """
+        if not self._ensure_connection():
+            return []
+
+        try:
+            query = """
+            SELECT * FROM shipments
+            WHERE dynamo_tenant_id = %s
+                AND tracking_number NOT IN (SELECT tracking_number FROM excluded_shipments)
+            ORDER BY created_at DESC
+            """
+
+            self.cursor.execute(query, (dynamo_tenant_id,))
+            results = self.cursor.fetchall()
+
+            if not results:
+                return []
+
+            columns = [desc[0] for desc in self.cursor.description]
+            shipments = [dict(zip(columns, row)) for row in results]
+            logger.info(f"Found {len(shipments)} shipments for tenant {dynamo_tenant_id}")
+            return shipments
+
+        except psycopg2.Error as e:
+            logger.error(f"Error getting shipments by tenant: {e}")
             return []
 
     def update_shipment_fedex_data(self, tracking_number: str, data: Dict[str, Any]) -> bool:
@@ -1015,6 +1055,27 @@ class DBManager:
 
             self.cursor.execute(shipments_query)
             logger.debug("Ensured shipments table exists")
+
+            # Add dynamo_tenant_id column if not exists
+            try:
+                self.cursor.execute("""
+                    ALTER TABLE shipments ADD COLUMN IF NOT EXISTS dynamo_tenant_id INTEGER;
+                    CREATE INDEX IF NOT EXISTS idx_shipments_dynamo_tenant_id ON shipments(dynamo_tenant_id);
+                """)
+                # Backfill from dynamo_data JSON for existing records
+                self.cursor.execute("""
+                    UPDATE shipments 
+                    SET dynamo_tenant_id = (dynamo_data::jsonb->>'tenant')::integer 
+                    WHERE dynamo_data IS NOT NULL 
+                    AND dynamo_tenant_id IS NULL
+                    AND dynamo_data::text != 'null'
+                    AND dynamo_data::jsonb->>'tenant' IS NOT NULL
+                """)
+                self.conn.commit()
+                logger.debug("Ensured dynamo_tenant_id column exists and backfilled")
+            except Exception as e:
+                logger.warning(f"dynamo_tenant_id migration note: {e}")
+                self.conn.rollback()
 
             # --- excluded_shipments table ---
             excluded_shipments_query = """
