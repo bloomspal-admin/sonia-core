@@ -570,7 +570,7 @@ async def test_email(api_key: str = "", to_email: str = ""):
 
 @app.get("/api/diagnostic/tenant-distribution")
 async def tenant_distribution(api_key: str = ""):
-    """Diagnostic: show distribution of dynamo_tenant_id."""
+    """Diagnostic: show distribution of dynamo_tenant_id and exclusions."""
     if api_key != config.SONIA_AGENT_API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API key")
     try:
@@ -594,22 +594,6 @@ async def tenant_distribution(api_key: str = ""):
         cur.execute("SELECT COUNT(*) FROM shipments WHERE dynamo_tenant_id IS NULL")
         null_count = cur.fetchone()[0]
         
-        cur.execute("""
-            SELECT dynamo_tenant_id, substring(dynamo_data::text, 1, 300) as sample
-            FROM shipments WHERE dynamo_data IS NOT NULL 
-            AND dynamo_tenant_id != 1 AND dynamo_tenant_id != 13
-            LIMIT 3
-        """)
-        samples_other = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
-        
-        cur.execute("""
-            SELECT dynamo_tenant_id, substring(dynamo_data::text, 1, 300) as sample
-            FROM shipments WHERE dynamo_data IS NOT NULL
-            LIMIT 3
-        """)
-        samples = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
-        
-        conn.close()
         # Exclusion analysis
         cur.execute("""
             SELECT reason, DATE(excluded_at) as date, COUNT(*) as count
@@ -617,13 +601,63 @@ async def tenant_distribution(api_key: str = ""):
             GROUP BY reason, DATE(excluded_at)
             ORDER BY date DESC, count DESC
         """)
-        excl_dist = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        excl_rows = cur.fetchall()
+        excl_dist = []
+        for r in excl_rows:
+            excl_dist.append({"reason": r[0], "date": str(r[1]) if r[1] else None, "count": r[2]})
         
         cur.execute("SELECT COUNT(*) FROM excluded_shipments")
         total_excluded = cur.fetchone()[0]
         
         conn.close()
-        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples, "samples_other_tenants": samples_other, "total_excluded": total_excluded, "exclusion_distribution": excl_dist}
+        return {
+            "total_shipments": total,
+            "null_tenant_count": null_count,
+            "distribution": distribution,
+            "total_excluded": total_excluded,
+            "exclusion_distribution": excl_dist
+        }
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@app.post("/api/diagnostic/cleanup-exclusions")
+async def cleanup_exclusions(api_key: str = "", confirm: bool = False):
+    """Clean up excluded_shipments table - TRUNCATE and let startup re-populate with only legitimate entries."""
+    if api_key != config.SONIA_AGENT_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    try:
+        import psycopg2
+        conn = psycopg2.connect(config.DATABASE_URL)
+        cur = conn.cursor()
+        
+        # First show current state
+        cur.execute("SELECT COUNT(*) FROM excluded_shipments")
+        before_count = cur.fetchone()[0]
+        
+        if not confirm:
+            conn.close()
+            return {
+                "status": "preview",
+                "current_excluded_count": before_count,
+                "message": "Add confirm=true to actually truncate the table. App restart will re-insert only the 972 legitimate exclusions (119 hardcoded + 853 from txt)."
+            }
+        
+        # TRUNCATE the table
+        cur.execute("TRUNCATE TABLE excluded_shipments RESTART IDENTITY")
+        conn.commit()
+        
+        cur.execute("SELECT COUNT(*) FROM excluded_shipments")
+        after_count = cur.fetchone()[0]
+        
+        conn.close()
+        return {
+            "status": "success",
+            "before_count": before_count,
+            "after_count": after_count,
+            "message": "Table truncated. Redeploy or restart the app to re-insert the 972 legitimate exclusions."
+        }
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
