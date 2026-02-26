@@ -156,6 +156,7 @@ def run_daily_flow(manual: bool = False):
                 "tracking_number": item["tracking_number"],
                 "client_id": client_info.get("client_id"),
                 "client_name_raw": client_info.get("client_name", f"Tenant-{tenant_id}"),
+                "dynamo_tenant_id": tenant_id,
                 "dynamo_data": json.dumps({
                     "reserve_id": item.get("reserve_id"),
                     "order_id": item.get("order_id"),
@@ -372,54 +373,62 @@ def run_daily_flow(manual: bool = False):
                         logger.error(f"Error reading WhatsApp BBDD spreadsheet: {e}")
                         errors.append({"step": "whatsapp_bbdd", "error": str(e)})
 
-                # Process each client/tenant
-                for tenant_id, client_info in tenant_mapping.items():
-                    client_id = client_info.get("client_id")
-                    client_name = client_info.get("client_name", f"Tenant-{tenant_id}")
-                    odoo_company_id = client_info.get("odoo_company_id")
+                # Get tenant list from Odoo Hoja2 (source of truth)
+                odoo_tenant_list = bbdd_data.get("tenant_mapping", {})
+                if not odoo_tenant_list:
+                    logger.warning("No tenant mapping from Odoo Hoja2, falling back to DB tenant_mapping")
+                    odoo_tenant_list = {int(tid): info.get("client_name", f"Tenant-{tid}") for tid, info in tenant_mapping.items()}
+                
+                logger.info(f"Processing {len(odoo_tenant_list)} tenants from Odoo spreadsheet")
 
-                    # Get shipments for this client
-                    if client_id:
-                        shipments = db.get_all_shipments_for_report(client_id)
+                # Process each tenant from Odoo spreadsheet
+                for tenant_id, client_name in odoo_tenant_list.items():
+                    # Get shipments by dynamo_tenant_id (includes ALL guides for this tenant)
+                    shipments = db.get_shipments_by_tenant_for_report(int(tenant_id))
 
-                        if not shipments:
-                            continue
+                    if not shipments:
+                        logger.info(f"No shipments for tenant {tenant_id} ({client_name}), skipping")
+                        continue
 
-                        # Generate report
-                        report_text = report_gen.generate_client_report(client_name, shipments)
-                        metrics["reports_generated"] += 1
+                    logger.info(f"Tenant {tenant_id} ({client_name}): {len(shipments)} shipments for report")
 
-                        # Generate Excel report for attachment
-                        excel_gen = ExcelReportGenerator()
-                        excel_path = excel_gen.generate_tenant_report(client_name, shipments)
-                        if excel_path:
-                            logger.info(f"Excel generated for {client_name}: {excel_path}")
-                        else:
-                            logger.warning(f"Failed to generate Excel for {client_name}")
+                    # Generate report
+                    report_text = report_gen.generate_client_report(client_name, shipments)
+                    metrics["reports_generated"] += 1
 
-                        # Send report to contacts from WhatsApp BBDD spreadsheet
-                        tenant_contacts = contacts_by_tenant.get(int(tenant_id), [])
-                        if tenant_contacts:
-                            for contact in tenant_contacts:
-                                phone = contact.get("whatsapp")
-                                if phone:
-                                    success = whatsapp.send_report_sync(phone, report_text, client_name)
-                                    if success:
-                                        metrics["reports_sent"] += 1
+                    # Generate Excel report for attachment
+                    excel_gen = ExcelReportGenerator()
+                    excel_path = excel_gen.generate_tenant_report(client_name, shipments)
+                    if excel_path:
+                        logger.info(f"Excel generated for {client_name}: {excel_path}")
+                    else:
+                        logger.warning(f"Failed to generate Excel for {client_name}")
+
+                    # Send report to contacts from WhatsApp BBDD spreadsheet (Hoja1)
+                    tenant_contacts = contacts_by_tenant.get(int(tenant_id), [])
+                    if tenant_contacts:
+                        for contact in tenant_contacts:
+                            phone = contact.get("whatsapp")
+                            if phone:
+                                success = whatsapp.send_report_sync(phone, report_text, client_name)
+                                if success:
+                                    metrics["reports_sent"] += 1
                             # Also send via email
                             if email_sender:
                                 email_addr = contact.get("email")
                                 if email_addr:
                                     email_sender.send_report_email(email_addr, client_name, report_text, excel_path=excel_path)
-                        else:
-                            # No contacts for this tenant - alert admin
+                    else:
+                        # No contacts in Hoja1 for this tenant - send to admin email
+                        logger.warning(f"No contacts for tenant {tenant_id} ({client_name}), sending to admin")
+                        if email_sender and config.ADMIN_WHATSAPP:
+                            # Send admin alert about missing contacts
                             active_count = len([s for s in shipments if not s.get("is_delivered")])
                             alert = report_gen.generate_admin_inconsistency_alert(
                                 client_name, tenant_id, active_count
                             )
-                            if config.ADMIN_WHATSAPP:
-                                whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert)
-                                metrics["alerts_sent"] += 1
+                            whatsapp.send_alert_sync(config.ADMIN_WHATSAPP, alert)
+                            metrics["alerts_sent"] += 1
 
                 logger.info(f"Reports: {metrics['reports_generated']} generated, {metrics['reports_sent']} sent")
             else:
