@@ -195,7 +195,7 @@ class WarehouseParser:
             col_i = str(vals[8] or "").strip() if len(vals) > 8 else ""  # AWB
 
             # New order starts when col A has an order number
-            if col_a and col_a.startswith("#"):
+            if col_a:
                 current_order = col_a
                 orders.add(current_order)
 
