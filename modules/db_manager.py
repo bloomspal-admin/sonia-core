@@ -6,7 +6,7 @@ Schema aligned with migrations/001_initial_schema.sql.
 """
 
 import json
-import loggin
+import logging
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from typing import List, Dict, Any, Optional
