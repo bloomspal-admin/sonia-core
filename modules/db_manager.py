@@ -6,7 +6,7 @@ Schema aligned with migrations/001_initial_schema.sql.
 """
 
 import json
-import logging
+import loggin
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from typing import List, Dict, Any, Optional
@@ -471,7 +471,7 @@ class DBManager:
                 return []
 
             columns = [desc[0] for desc in self.cursor.description]
-            shipments = [dict(zip(columns, row)) for row in results]
+            shipments = [dict(row) for row in results]
             logger.info(f"Found {len(shipments)} shipments for tenant {dynamo_tenant_id}")
             return shipments
 
