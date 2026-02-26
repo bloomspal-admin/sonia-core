@@ -610,7 +610,20 @@ async def tenant_distribution(api_key: str = ""):
         samples = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
         
         conn.close()
-        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples, "samples_other_tenants": samples_other}
+        # Exclusion analysis
+        cur.execute("""
+            SELECT reason, DATE(excluded_at) as date, COUNT(*) as count
+            FROM excluded_shipments
+            GROUP BY reason, DATE(excluded_at)
+            ORDER BY date DESC, count DESC
+        """)
+        excl_dist = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+        
+        cur.execute("SELECT COUNT(*) FROM excluded_shipments")
+        total_excluded = cur.fetchone()[0]
+        
+        conn.close()
+        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples, "samples_other_tenants": samples_other, "total_excluded": total_excluded, "exclusion_distribution": excl_dist}
     except Exception as e:
         import traceback
         return {"error": str(e), "traceback": traceback.format_exc()}
