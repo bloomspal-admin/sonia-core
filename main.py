@@ -568,6 +568,38 @@ async def test_email(api_key: str = "", to_email: str = ""):
         return {"status": "error", "detail": str(e)}
 
 
+@app.get("/api/diagnostic/tenant-distribution")
+async def tenant_distribution(api_key: str = ""):
+    """Diagnostic: show distribution of dynamo_tenant_id."""
+    if api_key != config.SONIA_AGENT_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    try:
+        db = DatabaseManager(config.DATABASE_URL)
+        db.cursor.execute("""
+            SELECT dynamo_tenant_id, COUNT(*) as count,
+                   COUNT(DISTINCT tracking_number) as unique_trackings
+            FROM shipments
+            GROUP BY dynamo_tenant_id
+            ORDER BY count DESC
+        """)
+        rows = db.cursor.fetchall()
+        cols = [desc[0] for desc in db.cursor.description]
+        distribution = [dict(zip(cols, row)) for row in rows]
+        db.cursor.execute("SELECT COUNT(*) FROM shipments")
+        total = db.cursor.fetchone()[0]
+        db.cursor.execute("SELECT COUNT(*) FROM shipments WHERE dynamo_tenant_id IS NULL")
+        null_count = db.cursor.fetchone()[0]
+        db.cursor.execute("""
+            SELECT dynamo_tenant_id, substring(dynamo_data::text, 1, 300) as sample
+            FROM shipments WHERE dynamo_data IS NOT NULL LIMIT 5
+        """)
+        samples = [dict(zip([d[0] for d in db.cursor.description], r)) for r in db.cursor.fetchall()]
+        db.close()
+        return {"total": total, "null_count": null_count, "distribution": distribution, "samples": samples}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/api/status")
 async def get_status():
     """Get the status of the last run."""
