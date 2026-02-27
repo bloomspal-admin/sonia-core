@@ -466,7 +466,7 @@ async def lifespan(app: FastAPI):
     # Startup: start scheduler
     scheduler.add_job(
         run_daily_flow,
-        CronTrigger(hour=config.CRON_HOUR, minute=config.CRON_MINUTE),
+        CronTrigger(hour=config.CRON_HOUR, minute=config.CRON_MINUTE, timezone="America/Bogota")
         id="daily_flow",
         name="SonIA Daily Tracking Flow",
         replace_existing=True,
