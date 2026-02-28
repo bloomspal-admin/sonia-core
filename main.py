@@ -877,6 +877,25 @@ async def confirm_warehouse(token: str):
     preview = stored["preview"]
 
     try:
+        # --- Re-check AWB duplicates at confirm time ---
+    all_awbs_confirm = []
+    for brand, bdata in preview.items():
+        awbs = bdata.get("tracking_numbers", [])
+        if awbs:
+            all_awbs_confirm.extend(awbs)
+    dup_result = _check_duplicate_awbs(all_awbs_confirm)
+    if dup_result["has_duplicates"]:
+        dup_list = dup_result["duplicates"]
+        source = dup_list[0].get("source_filename", "unknown") if dup_list else "unknown"
+        del _warehouse_previews[token]
+        raise HTTPException(
+            409,
+            {
+                "error": "duplicate_awbs",
+                "message": f"This shipment has already been processed. {len(dup_list)} tracking number(s) already exist from file '{source}'.",
+                "duplicates": dup_list[:10],
+            },
+        )
         # Connect to Odoo
         creator = OdooSaleOrderCreator(
             url=config.ODOO_URL,
@@ -1329,7 +1348,7 @@ WAREHOUSE_HTML = """<!DOCTYPE html>
                 });
                 const data = await res.json();
 
-                if (!res.ok) throw new Error(data.detail || 'Error creando ordenes');
+                if (!res.ok) throw new Error(if (!res.ok) { const msg = typeof data.detail === 'object' ? data.detail.message : (data.detail || 'Error creando ordenes'); throw new Error(msg); );
 
                 renderResults(data);
                 hide('loadingSection');
