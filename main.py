@@ -10,7 +10,7 @@ Automated daily flow:
 3. Store/update results in PostgreSQL
 4. Detect anomalies and create proactive claims
 5. Query Odoo for client contacts
-6. Send reports via WhatsApp through SonIA Agent
+6. Send reports via WhatsApp through SonIA Agen
 7. Alert admin on inconsistencies
 
 Schedule: Daily at 4:00 AM COT (UTC-5)
@@ -786,7 +786,7 @@ def _check_duplicate_filename(filename: str) -> dict:
         return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
     except Exception as e:
         logger.warning(f"Could not check duplicate filename: {e}")
-        return {"has_duplicates": False, "duplicates": []} ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ preview data
+                return {"has_duplicates": False, "duplicates": []}
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
