@@ -10,7 +10,7 @@ Automated daily flow:
 3. Store/update results in PostgreSQL
 4. Detect anomalies and create proactive claims
 5. Query Odoo for client contacts
-6. Send reports via WhatsApp through SonIA Agen
+6. Send reports via WhatsApp through SonIA Agent
 7. Alert admin on inconsistencies
 
 Schedule: Daily at 4:00 AM COT (UTC-5)
@@ -878,24 +878,24 @@ async def confirm_warehouse(token: str):
 
     try:
         # --- Re-check AWB duplicates at confirm time ---
-    all_awbs_confirm = []
-    for brand, bdata in preview.items():
-        awbs = bdata.get("tracking_numbers", [])
-        if awbs:
-            all_awbs_confirm.extend(awbs)
-    dup_result = _check_duplicate_awbs(all_awbs_confirm)
-    if dup_result["has_duplicates"]:
-        dup_list = dup_result["duplicates"]
-        source = dup_list[0].get("source_filename", "unknown") if dup_list else "unknown"
-        del _warehouse_previews[token]
-        raise HTTPException(
-            409,
-            {
-                "error": "duplicate_awbs",
-                "message": f"This shipment has already been processed. {len(dup_list)} tracking number(s) already exist from file '{source}'.",
-                "duplicates": dup_list[:10],
-            },
-        )
+        all_awbs_confirm = []
+        for brand, bdata in preview.items():
+            awbs = bdata.get("tracking_numbers", [])
+            if awbs:
+                all_awbs_confirm.extend(awbs)
+        dup_result = _check_duplicate_awbs(all_awbs_confirm)
+        if dup_result["has_duplicates"]:
+            dup_list = dup_result["duplicates"]
+            source = dup_list[0].get("source_filename", "unknown") if dup_list else "unknown"
+            del _warehouse_previews[token]
+            raise HTTPException(
+                409,
+                {
+                    "error": "duplicate_awbs",
+                    "message": f"This shipment has already been processed. {len(dup_list)} tracking number(s) already exist from file '{source}'.",
+                    "duplicates": dup_list[:10],
+                },
+            )
         # Connect to Odoo
         creator = OdooSaleOrderCreator(
             url=config.ODOO_URL,
