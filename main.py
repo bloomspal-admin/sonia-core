@@ -20,6 +20,7 @@ import logging
 import sys
 import json
 import os
+import re
 import uuid
 import hashlib
 import tempfile
@@ -751,7 +752,41 @@ def _check_duplicate_awbs(all_awbs: list) -> dict:
         return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
     except Exception as e:
         logger.warning(f"Could not check duplicate AWBs: {e}")
-        return {"has_duplicates": False, "duplicates": []}  # token ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ preview data
+        return {"has_duplicates": False, "duplicates": []}  # token
+
+
+def _check_duplicate_filename(filename: str) -> dict:
+    """Check if a warehouse file was already processed (by source_filename).
+    Used as fallback for Datos Carga Manual files that have no tracking numbers.
+    """
+    if not filename:
+        return {"has_duplicates": False, "duplicates": []}
+    try:
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return {"has_duplicates": False, "duplicates": []}
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        base_name = filename.rsplit(".", 1)[0]
+        clean_name = re.sub(r'-[0-9a-f]{8}$', '', base_name)
+        cur.execute("""
+            SELECT DISTINCT
+                brand_name,
+                dispatch_date::text,
+                source_filename,
+                created_at::text
+            FROM warehouse_billing
+            WHERE source_filename ILIKE %s
+               OR source_filename ILIKE %s
+        """, (f"%{clean_name}%", f"%{filename}%"))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        dupes = [{"awb": "N/A (archivo)", "brand_name": r[0], "dispatch_date": r[1], "source_filename": r[2]} for r in rows]
+        return {"has_duplicates": len(dupes) > 0, "duplicates": dupes}
+    except Exception as e:
+        logger.warning(f"Could not check duplicate filename: {e}")
+        return {"has_duplicates": False, "duplicates": []} ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ preview data
 
 # Path to SKU map (bundled in repo or loaded at startup)
 _SKU_MAP_PATH = os.path.join(os.path.dirname(__file__), "sku_map.json")
@@ -805,13 +840,17 @@ async def process_warehouse(file: UploadFile = File(...)):
         processor = WarehouseProcessor(sku_map=sku_map)
         preview = processor.process(parsed)
 
-        # --- Duplicate AWB check ---
+        # --- Duplicate check ---
         all_awbs = []
         for brand, bdata in preview.items():
             awbs = bdata.get("tracking_numbers", [])
             if awbs:
                 all_awbs.extend(awbs)
-        duplicate_result = _check_duplicate_awbs(all_awbs)
+
+        if all_awbs:
+            duplicate_result = _check_duplicate_awbs(all_awbs)
+        else:
+            duplicate_result = _check_duplicate_filename(file.filename)
 
         # Generate token and store preview
         token = str(uuid.uuid4())
@@ -877,13 +916,17 @@ async def confirm_warehouse(token: str):
     preview = stored["preview"]
 
     try:
-        # --- Re-check AWB duplicates at confirm time ---
+        # --- Re-check duplicates at confirm time ---
         all_awbs_confirm = []
         for brand, bdata in preview.items():
             awbs = bdata.get("tracking_numbers", [])
             if awbs:
                 all_awbs_confirm.extend(awbs)
-        dup_result = _check_duplicate_awbs(all_awbs_confirm)
+
+        if all_awbs_confirm:
+            dup_result = _check_duplicate_awbs(all_awbs_confirm)
+        else:
+            dup_result = _check_duplicate_filename(stored.get("filename", ""))
         if dup_result["has_duplicates"]:
             dup_list = dup_result["duplicates"]
             source = dup_list[0].get("source_filename", "unknown") if dup_list else "unknown"
