@@ -10,7 +10,7 @@ Automated daily flow:
 3. Store/update results in PostgreSQL
 4. Detect anomalies and create proactive claims
 5. Query Odoo for client contacts
-6. Send reports via WhatsApp through SonIA Agent
+6. Send reports via WhatsApp through SonIA Agen
 7. Alert admin on inconsistencies
 
 Schedule: Daily at 4:00 AM COT (UTC-5)
